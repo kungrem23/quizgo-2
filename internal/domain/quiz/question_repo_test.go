@@ -227,6 +227,13 @@ func TestChangeQuestionPosition_Success(t *testing.T) {
 		newPosition = 6
 		userId      = 4
 	)
+	queryAuthor := regexp.QuoteMeta(`SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`)
+	mock.ExpectQuery(queryAuthor).
+		WithArgs(questionId).
+		WillReturnRows(sqlmock.NewRows([]string{"author_id"}).AddRow(userId))
 	// GetQuestion
 	queryGetQuestion := regexp.QuoteMeta(`SELECT id, text_content, position, image_id, quiz_id FROM questions
 	WHERE id=$1`)
@@ -238,6 +245,12 @@ func TestChangeQuestionPosition_Success(t *testing.T) {
 			AddRow(questionId, textContent, position, imageId, quizId))
 
 	mock.ExpectBegin()
+	queryCount := regexp.QuoteMeta(`SELECT COUNT(*)
+	FROM questions
+	WHERE quiz_id = $1`)
+	mock.ExpectQuery(queryCount).
+		WithArgs(quizId).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(newPosition))
 	query1 := regexp.QuoteMeta(`UPDATE questions
 			SET position = position - 1
 			WHERE quiz_id = $1 AND position > $2 AND position <= $3;`)
@@ -272,14 +285,13 @@ func TestChangeQuestionPosition_NotFound(t *testing.T) {
 		newPosition = 6
 		userId      = 4
 	)
-	// GetQuestion
-	queryGetQuestion := regexp.QuoteMeta(`SELECT id, text_content, position, image_id, quiz_id FROM questions
-	WHERE id=$1`)
-	mock.ExpectQuery(queryGetQuestion).
+	queryAuthor := regexp.QuoteMeta(`SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`)
+	mock.ExpectQuery(queryAuthor).
 		WithArgs(questionId).
-		WillReturnRows(sqlmock.
-			NewRows([]string{"id", "text_content",
-				"position", "image_id", "quiz_id"}))
+		WillReturnRows(sqlmock.NewRows([]string{"author_id"}))
 
 	err := repo.ChangeQuestionPosition(
 		context.Background(), questionId, newPosition, userId,
@@ -302,6 +314,13 @@ func TestChangeQuestionPosition_PositionsMatches(t *testing.T) {
 		newPosition = 3
 		userId      = 4
 	)
+	queryAuthor := regexp.QuoteMeta(`SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`)
+	mock.ExpectQuery(queryAuthor).
+		WithArgs(questionId).
+		WillReturnRows(sqlmock.NewRows([]string{"author_id"}).AddRow(userId))
 	// GetQuestion
 	queryGetQuestion := regexp.QuoteMeta(`SELECT id, text_content, position, image_id, quiz_id FROM questions
 	WHERE id=$1`)
@@ -311,6 +330,14 @@ func TestChangeQuestionPosition_PositionsMatches(t *testing.T) {
 			NewRows([]string{"id", "text_content",
 				"position", "image_id", "quiz_id"}).
 			AddRow(questionId, textContent, position, imageId, quizId))
+	mock.ExpectBegin()
+	queryCount := regexp.QuoteMeta(`SELECT COUNT(*)
+	FROM questions
+	WHERE quiz_id = $1`)
+	mock.ExpectQuery(queryCount).
+		WithArgs(quizId).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(position))
+	mock.ExpectCommit()
 
 	err := repo.ChangeQuestionPosition(
 		context.Background(), questionId, newPosition, userId,
@@ -318,6 +345,67 @@ func TestChangeQuestionPosition_PositionsMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangeQuestionPosition error got: %v | expect: %v",
 			err, nil)
+	}
+}
+
+func TestChangeQuestionPosition_InvalidPosition(t *testing.T) {
+	repo, mock, cleanup := newPostgresRepoMock(t)
+	defer cleanup()
+	const (
+		questionId  = 5
+		position    = 3
+		quizId      = 9
+		newPosition = 7
+		userId      = 4
+	)
+	queryAuthor := regexp.QuoteMeta(`SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`)
+	mock.ExpectQuery(queryAuthor).
+		WithArgs(questionId).
+		WillReturnRows(sqlmock.NewRows([]string{"author_id"}).AddRow(userId))
+	queryGetQuestion := regexp.QuoteMeta(`SELECT id, text_content, position, image_id, quiz_id FROM questions
+	WHERE id=$1`)
+	mock.ExpectQuery(queryGetQuestion).
+		WithArgs(questionId).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text_content", "position", "image_id", "quiz_id"}).
+			AddRow(questionId, "question", position, "image", quizId))
+	mock.ExpectBegin()
+	queryCount := regexp.QuoteMeta(`SELECT COUNT(*)
+	FROM questions
+	WHERE quiz_id = $1`)
+	mock.ExpectQuery(queryCount).
+		WithArgs(quizId).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(6))
+	mock.ExpectRollback()
+
+	err := repo.ChangeQuestionPosition(context.Background(), questionId, newPosition, userId)
+	if !errors.Is(err, ErrInvalidQuestionPosition) {
+		t.Fatalf("ChangeQuestionPosition error got: %v | want: %v", err, ErrInvalidQuestionPosition)
+	}
+}
+
+func TestChangeQuestionPosition_Forbidden(t *testing.T) {
+	repo, mock, cleanup := newPostgresRepoMock(t)
+	defer cleanup()
+	const (
+		questionId  = 5
+		authorId    = 4
+		otherUser   = 7
+		newPosition = 6
+	)
+	queryAuthor := regexp.QuoteMeta(`SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`)
+	mock.ExpectQuery(queryAuthor).
+		WithArgs(questionId).
+		WillReturnRows(sqlmock.NewRows([]string{"author_id"}).AddRow(authorId))
+
+	err := repo.ChangeQuestionPosition(context.Background(), questionId, newPosition, otherUser)
+	if !errors.Is(err, middleware.ErrInsufficientRights) {
+		t.Fatalf("ChangeQuestionPosition error got: %v | want: %v", err, middleware.ErrInsufficientRights)
 	}
 }
 

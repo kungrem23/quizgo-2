@@ -2,7 +2,6 @@ package quizhandler
 
 import (
 	"database/sql"
-	"encoding/json"
 	"strings"
 
 	// "encoding/json"
@@ -12,7 +11,7 @@ import (
 
 	// "github.com/gorilla/mux"
 	// "github.com/golang-jwt/jwt/v5"
-	"github.com/kungrem23/quizgo/internal/domain/quiz"
+	// "github.com/kungrem23/quizgo/internal/domain/quiz"
 	"github.com/kungrem23/quizgo/internal/http/middleware"
 	"github.com/kungrem23/quizgo/internal/http/middleware/respond"
 	// "github.com/kungrem23/quizgo/internal/utils"
@@ -20,17 +19,17 @@ import (
 )
 
 type QuizHandler struct {
-	service *quiz.Service
+	service quizService
 }
 
-func NewQuizHandler(service *quiz.Service) *QuizHandler {
+func NewQuizHandler(service quizService) *QuizHandler {
 	return &QuizHandler{service: service}
 }
 
 func (h *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "bad request",
 		})
@@ -51,7 +50,7 @@ func (h *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	respond.WriteJSON(w, http.StatusOK, quiz)
+	respond.WriteJSON(w, http.StatusOK, newQuizResponse(quiz))
 }
 
 type CreateQuizRequest struct {
@@ -67,7 +66,7 @@ func (h *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CreateQuizRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := decodeJSON(r, &req)
 	if err != nil {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "bad request",
@@ -99,13 +98,13 @@ func (h *QuizHandler) ListQuizzes(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	respond.WriteJSON(w, http.StatusOK, quizzes)
+	respond.WriteJSON(w, http.StatusOK, newQuizResponses(quizzes))
 }
 
 func (h *QuizHandler) ListQuizzesByAuthor(w http.ResponseWriter, r *http.Request) {
 	authorIdStr := r.PathValue("authorId")
 	authorId, err := strconv.Atoi(authorIdStr)
-	if err != nil {
+	if err != nil || authorId <= 0 {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "invalid id",
 		})
@@ -118,5 +117,5 @@ func (h *QuizHandler) ListQuizzesByAuthor(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
-	respond.WriteJSON(w, http.StatusOK, quizzes)
+	respond.WriteJSON(w, http.StatusOK, newQuizResponses(quizzes))
 }

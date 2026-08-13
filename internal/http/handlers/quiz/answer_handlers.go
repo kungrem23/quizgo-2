@@ -2,22 +2,21 @@ package quizhandler
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/kungrem23/quizgo/internal/domain/quiz"
+	// "github.com/kungrem23/quizgo/internal/domain/quiz"
 	"github.com/kungrem23/quizgo/internal/http/middleware"
 	"github.com/kungrem23/quizgo/internal/http/middleware/respond"
 )
 
 type AnswerHandler struct {
-	service *quiz.Service
+	service answerService
 }
 
-func NewAnswerHandler(service *quiz.Service) *AnswerHandler {
+func NewAnswerHandler(service answerService) *AnswerHandler {
 	return &AnswerHandler{service: service}
 }
 
@@ -36,7 +35,7 @@ func (h *AnswerHandler) CreateAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CreateAnswerRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := decodeJSON(r, &req)
 	if err != nil {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "bad request",
@@ -47,6 +46,12 @@ func (h *AnswerHandler) CreateAnswer(w http.ResponseWriter, r *http.Request) {
 	if req.TextContent == "" {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "empty text content",
+		})
+		return
+	}
+	if req.QuestionId <= 0 {
+		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
+			Error: "invalid question id",
 		})
 		return
 	}
@@ -81,7 +86,7 @@ func (h *AnswerHandler) DeleteAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 	answerIdStr := r.PathValue("id")
 	answerId, err := strconv.Atoi(answerIdStr)
-	if err != nil {
+	if err != nil || answerId <= 0 {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "invalid answer id",
 		})
@@ -111,7 +116,7 @@ func (h *AnswerHandler) DeleteAnswer(w http.ResponseWriter, r *http.Request) {
 func (h *AnswerHandler) GetAnswer(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{
 			Error: "invalid answer id",
 		})
@@ -130,7 +135,7 @@ func (h *AnswerHandler) GetAnswer(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	respond.WriteJSON(w, http.StatusOK, answer)
+	respond.WriteJSON(w, http.StatusOK, newAnswerResponse(answer))
 }
 
 func (h *AnswerHandler) ListAnswersByQuestionId(w http.ResponseWriter, r *http.Request) {

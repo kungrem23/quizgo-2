@@ -107,22 +107,45 @@ func (r *PostgresRepository) DeleteQuestionAsAuthor(ctx context.Context, id int,
 }
 
 func (r *PostgresRepository) ChangeQuestionPosition(ctx context.Context, id, new_position, authorId int) error {
+	query := `SELECT quizzes.author_id
+	FROM questions
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE questions.id = $1`
+	row := r.db.QueryRowContext(ctx, query, id)
+	var quizAuthorId int
+	if err := row.Scan(&quizAuthorId); err != nil {
+		return err
+	}
+	if quizAuthorId != authorId {
+		return middleware.ErrInsufficientRights
+	}
+
 	question, err := r.GetQuestion(ctx, id)
 	if err != nil {
 		return err
 	}
 	old_pos := question.Position
-	if new_position == old_pos {
-		return nil
-	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	countQuery := `SELECT COUNT(*)
+	FROM questions
+	WHERE quiz_id = $1`
+	var questionCount int
+	if err := tx.QueryRowContext(ctx, countQuery, question.QuizId).Scan(&questionCount); err != nil {
+		return err
+	}
+	if new_position < 1 || new_position > questionCount {
+		return ErrInvalidQuestionPosition
+	}
+	if new_position == old_pos {
+		return tx.Commit()
+	}
 
-	var query string
+	query = ""
 	if new_position < old_pos {
 		query = `UPDATE questions
 			SET position = position + 1
