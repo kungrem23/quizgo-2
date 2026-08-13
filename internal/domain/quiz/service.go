@@ -72,6 +72,10 @@ func (s *Service) GetAnswer(ctx context.Context, id int) (Answer, error) {
 	return s.repo.GetAnswer(ctx, id)
 }
 
+func (s *Service) GetAnswerAsAuthor(ctx context.Context, id, userId int) (Answer, error) {
+	return s.repo.GetAnswerAsAuthor(ctx, id, userId)
+}
+
 func (s *Service) ListAnswersByQuestionId(ctx context.Context, questionId int) ([]Answer, error) {
 	return s.repo.GetAnswersByQuestionId(ctx, questionId)
 }

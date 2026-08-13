@@ -21,9 +21,10 @@ import (
 type answerServiceStub struct {
 	answerService
 
-	createAnswerFunc func(ctx context.Context, textContent string, isCorrect bool, questionID, userID int) error
-	deleteAnswerFunc func(ctx context.Context, id, userID int) error
-	getAnswerFunc    func(ctx context.Context, id int) (quiz.Answer, error)
+	createAnswerFunc      func(ctx context.Context, textContent string, isCorrect bool, questionID, userID int) error
+	deleteAnswerFunc      func(ctx context.Context, id, userID int) error
+	getAnswerFunc         func(ctx context.Context, id int) (quiz.Answer, error)
+	getAnswerAsAuthorFunc func(ctx context.Context, id, userID int) (quiz.Answer, error)
 }
 
 func (s answerServiceStub) CreateAnswerAsAuthor(ctx context.Context, textContent string, isCorrect bool, questionID, userID int) error {
@@ -36,6 +37,10 @@ func (s answerServiceStub) DeleteAnswerAsAuthor(ctx context.Context, id, userID 
 
 func (s answerServiceStub) GetAnswer(ctx context.Context, id int) (quiz.Answer, error) {
 	return s.getAnswerFunc(ctx, id)
+}
+
+func (s answerServiceStub) GetAnswerAsAuthor(ctx context.Context, id, userID int) (quiz.Answer, error) {
+	return s.getAnswerAsAuthorFunc(ctx, id, userID)
 }
 
 func authenticatedRequest(t *testing.T, method, target, body string) *http.Request {
@@ -242,9 +247,63 @@ func TestGetAnswer_Success(t *testing.T) {
 
 	NewAnswerHandler(service).GetAnswer(recorder, req)
 
-	assertDTOResponse(t, recorder, http.StatusOK, newAnswerResponse(want))
+	assertDTOResponse(t, recorder, http.StatusOK, newPublicAnswerResponse(want))
 	if contentType := recorder.Header().Get("Content-Type"); contentType != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", contentType)
+	}
+}
+
+// ================= GetAnswerAsAuthor ==================
+
+func TestGetAnswerAsAuthor_Success(t *testing.T) {
+	want := quiz.Answer{Id: 8, TextContent: "Paris", IsCorrect: true, QuestionId: 7}
+	service := answerServiceStub{getAnswerAsAuthorFunc: func(_ context.Context, id, userID int) (quiz.Answer, error) {
+		if id != 8 || userID != 42 {
+			t.Errorf("unexpected service args: id=%d userID=%d", id, userID)
+		}
+		return want, nil
+	}}
+	recorder := httptest.NewRecorder()
+	req := authenticatedRequest(t, http.MethodGet, "/answers/8/author", "")
+	req.SetPathValue("id", "8")
+
+	serveAuthenticated(NewAnswerHandler(service).GetAnswerAsAuthor, recorder, req)
+
+	assertDTOResponse(t, recorder, http.StatusOK, newAuthorAnswerResponse(want))
+}
+
+func TestGetAnswerAsAuthor_Unauthorized(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/answers/8/author", nil)
+	req.SetPathValue("id", "8")
+
+	NewAnswerHandler(answerServiceStub{}).GetAnswerAsAuthor(recorder, req)
+
+	assertErrorResponse(t, recorder, http.StatusUnauthorized, "invalid token")
+}
+
+func TestGetAnswerAsAuthor_ServiceErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		status  int
+		message string
+	}{
+		{name: "insufficient rights", err: middleware.ErrInsufficientRights, status: http.StatusUnauthorized, message: "you cant view this answer"},
+		{name: "not found", err: sql.ErrNoRows, status: http.StatusNotFound, message: "not found"},
+		{name: "internal error", err: errors.New("database unavailable"), status: http.StatusInternalServerError, message: "server error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := answerServiceStub{getAnswerAsAuthorFunc: func(context.Context, int, int) (quiz.Answer, error) {
+				return quiz.Answer{}, tt.err
+			}}
+			recorder := httptest.NewRecorder()
+			req := authenticatedRequest(t, http.MethodGet, "/answers/8/author", "")
+			req.SetPathValue("id", "8")
+			serveAuthenticated(NewAnswerHandler(service).GetAnswerAsAuthor, recorder, req)
+			assertErrorResponse(t, recorder, tt.status, tt.message)
+		})
 	}
 }
 

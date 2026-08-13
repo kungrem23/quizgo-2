@@ -135,7 +135,34 @@ func (h *AnswerHandler) GetAnswer(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	respond.WriteJSON(w, http.StatusOK, newAnswerResponse(answer))
+	respond.WriteJSON(w, http.StatusOK, newPublicAnswerResponse(answer))
+}
+
+func (h *AnswerHandler) GetAnswerAsAuthor(w http.ResponseWriter, r *http.Request) {
+	userId, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{Error: "invalid token"})
+		return
+	}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{Error: "invalid answer id"})
+		return
+	}
+	answer, err := h.service.GetAnswerAsAuthor(r.Context(), id, userId)
+	if err != nil {
+		if errors.Is(err, middleware.ErrInsufficientRights) {
+			respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{Error: "you cant view this answer"})
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			respond.WriteJSON(w, http.StatusNotFound, respond.ErrorResponse{Error: "not found"})
+			return
+		}
+		respond.WriteJSON(w, http.StatusInternalServerError, respond.ErrorResponse{Error: "server error"})
+		return
+	}
+	respond.WriteJSON(w, http.StatusOK, newAuthorAnswerResponse(answer))
 }
 
 func (h *AnswerHandler) ListAnswersByQuestionId(w http.ResponseWriter, r *http.Request) {

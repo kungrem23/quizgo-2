@@ -23,6 +23,7 @@ type answerService interface {
 	CreateAnswerAsAuthor(ctx context.Context, textContent string, isCorrect bool, questionId, userId int) error
 	DeleteAnswerAsAuthor(ctx context.Context, id int, userId int) error
 	GetAnswer(ctx context.Context, id int) (quiz.Answer, error)
+	GetAnswerAsAuthor(ctx context.Context, id, userId int) (quiz.Answer, error)
 	ListAnswersByQuestionId(ctx context.Context, questionId int) ([]quiz.Answer, error)
 }
 

@@ -256,6 +256,58 @@ func TestGetAnswer_NotFound(t *testing.T) {
 	}
 }
 
+func TestGetAnswerAsAuthor_Success(t *testing.T) {
+	repo, mock, cleanup := newPostgresRepoMock(t)
+	defer cleanup()
+	const (
+		answerId   = 12
+		questionId = 5
+		userId     = 4
+	)
+	query := regexp.QuoteMeta(`SELECT answers.id, answers.text_content, answers.is_correct, answers.question_id, quizzes.author_id
+	FROM answers
+	JOIN questions ON questions.id = answers.question_id
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE answers.id = $1`)
+	mock.ExpectQuery(query).
+		WithArgs(answerId).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text_content", "is_correct", "question_id", "author_id"}).
+			AddRow(answerId, "Paris", true, questionId, userId))
+
+	want := Answer{Id: answerId, TextContent: "Paris", IsCorrect: true, QuestionId: questionId}
+	got, err := repo.GetAnswerAsAuthor(context.Background(), answerId, userId)
+	if err != nil {
+		t.Fatalf("GetAnswerAsAuthor error got: %v | want: nil", err)
+	}
+	if got != want {
+		t.Fatalf("GetAnswerAsAuthor got: %#v | want: %#v", got, want)
+	}
+}
+
+func TestGetAnswerAsAuthor_Forbidden(t *testing.T) {
+	repo, mock, cleanup := newPostgresRepoMock(t)
+	defer cleanup()
+	const (
+		answerId    = 12
+		authorId    = 4
+		otherUserId = 7
+	)
+	query := regexp.QuoteMeta(`SELECT answers.id, answers.text_content, answers.is_correct, answers.question_id, quizzes.author_id
+	FROM answers
+	JOIN questions ON questions.id = answers.question_id
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE answers.id = $1`)
+	mock.ExpectQuery(query).
+		WithArgs(answerId).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text_content", "is_correct", "question_id", "author_id"}).
+			AddRow(answerId, "Paris", true, 5, authorId))
+
+	_, err := repo.GetAnswerAsAuthor(context.Background(), answerId, otherUserId)
+	if !errors.Is(err, middleware.ErrInsufficientRights) {
+		t.Fatalf("GetAnswerAsAuthor error got: %v | want: %v", err, middleware.ErrInsufficientRights)
+	}
+}
+
 // func TestGetAnswer_(t *testing.T) {
 // 	repo, mock, cleanup := newPostgresRepoMock(t)
 // 	defer cleanup()

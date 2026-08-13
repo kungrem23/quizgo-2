@@ -24,6 +24,7 @@ type Repository interface {
 	CreateNewAnswerAsAuthor(ctx context.Context, textContent string, isCorrect bool, questionId, userId int) error
 	DeleteAnswerAsAuthor(ctx context.Context, id int, userId int) error
 	GetAnswer(ctx context.Context, id int) (Answer, error)
+	GetAnswerAsAuthor(ctx context.Context, id, userId int) (Answer, error)
 	GetAnswersByQuestionId(ctx context.Context, questionId int) ([]Answer, error)
 
 	// ==========IMAGE============

@@ -10,15 +10,21 @@ type QuizResponse struct {
 }
 
 type QuestionResponse struct {
-	ID          int              `json:"id"`
-	QuizID      int              `json:"quiz_id"`
-	Position    int              `json:"position"`
-	TextContent string           `json:"text_content"`
-	ImageID     string           `json:"image_id"`
-	Answers     []AnswerResponse `json:"answers"`
+	ID          int                    `json:"id"`
+	QuizID      int                    `json:"quiz_id"`
+	Position    int                    `json:"position"`
+	TextContent string                 `json:"text_content"`
+	ImageID     string                 `json:"image_id"`
+	Answers     []PublicAnswerResponse `json:"answers"`
 }
 
-type AnswerResponse struct {
+type PublicAnswerResponse struct {
+	ID          int    `json:"id"`
+	TextContent string `json:"text_content"`
+	QuestionID  int    `json:"question_id"`
+}
+
+type AuthorAnswerResponse struct {
 	ID          int    `json:"id"`
 	TextContent string `json:"text_content"`
 	IsCorrect   bool   `json:"is_correct"`
@@ -62,12 +68,20 @@ func newQuestionResponse(value quiz.Question) QuestionResponse {
 		Position:    value.Position,
 		TextContent: value.TextContent,
 		ImageID:     value.ImageId,
-		Answers:     newAnswerResponses(value.Answers),
+		Answers:     newPublicAnswerResponses(value.Answers),
 	}
 }
 
-func newAnswerResponse(value quiz.Answer) AnswerResponse {
-	return AnswerResponse{
+func newPublicAnswerResponse(value quiz.Answer) PublicAnswerResponse {
+	return PublicAnswerResponse{
+		ID:          value.Id,
+		TextContent: value.TextContent,
+		QuestionID:  value.QuestionId,
+	}
+}
+
+func newAuthorAnswerResponse(value quiz.Answer) AuthorAnswerResponse {
+	return AuthorAnswerResponse{
 		ID:          value.Id,
 		TextContent: value.TextContent,
 		IsCorrect:   value.IsCorrect,
@@ -75,13 +89,13 @@ func newAnswerResponse(value quiz.Answer) AnswerResponse {
 	}
 }
 
-func newAnswerResponses(values []quiz.Answer) []AnswerResponse {
+func newPublicAnswerResponses(values []quiz.Answer) []PublicAnswerResponse {
 	if values == nil {
 		return nil
 	}
-	result := make([]AnswerResponse, len(values))
+	result := make([]PublicAnswerResponse, len(values))
 	for i := range values {
-		result[i] = newAnswerResponse(values[i])
+		result[i] = newPublicAnswerResponse(values[i])
 	}
 	return result
 }

@@ -91,6 +91,24 @@ func (r *PostgresRepository) GetAnswer(ctx context.Context, id int) (Answer, err
 	return answer, err
 }
 
+func (r *PostgresRepository) GetAnswerAsAuthor(ctx context.Context, id, userId int) (Answer, error) {
+	query := `SELECT answers.id, answers.text_content, answers.is_correct, answers.question_id, quizzes.author_id
+	FROM answers
+	JOIN questions ON questions.id = answers.question_id
+	JOIN quizzes ON quizzes.id = questions.quiz_id
+	WHERE answers.id = $1`
+	row := r.db.QueryRowContext(ctx, query, id)
+	var answer Answer
+	var authorId int
+	if err := row.Scan(&answer.Id, &answer.TextContent, &answer.IsCorrect, &answer.QuestionId, &authorId); err != nil {
+		return Answer{}, err
+	}
+	if authorId != userId {
+		return Answer{}, middleware.ErrInsufficientRights
+	}
+	return answer, nil
+}
+
 func (r *PostgresRepository) GetAllAnswers(ctx context.Context) ([]Answer, error) {
 	query := `SELECT id, text_content, is_correct, question_id 
 	FROM answers`
