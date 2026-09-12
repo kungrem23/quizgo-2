@@ -22,6 +22,18 @@ func NewQuestionHandler(service questionService) *QuestionHandler {
 	return &QuestionHandler{service: service}
 }
 
+// GetQuestion returns a question without loading its answers.
+//
+// @Summary Получить вопрос
+// @Description Возвращает вопрос. В текущей реализации поле answers равно null; ответы загружаются при получении квиза.
+// @Tags questions
+// @Produce json
+// @Param id path int true "ID вопроса" minimum(1)
+// @Success 200 {object} QuestionResponse
+// @Failure 400 {object} respond.ErrorResponse "Некорректный ID вопроса"
+// @Failure 404 {object} respond.ErrorResponse "Вопрос не найден"
+// @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
+// @Router /questions/{id} [get]
 func (h *QuestionHandler) GetQuestion(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
@@ -48,14 +60,31 @@ func (h *QuestionHandler) GetQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateQuestionRequest struct {
-	QuizId      int    `json:"quiz_id"`
-	TextContent string `json:"text_content"`
+	QuizId int `json:"quiz_id" validate:"required" minimum:"1" example:"1"`
+	// Текст не должен быть пустым после удаления пробелов по краям.
+	TextContent string `json:"text_content" validate:"required" minLength:"1" example:"Столица Франции?"`
 }
 
 type ChangeQuestionPositionRequest struct {
-	Position int `json:"position"`
+	// Позиция начинается с 1 и не может превышать число вопросов в квизе.
+	Position int `json:"position" validate:"required" minimum:"1" example:"2"`
 }
 
+// CreateQuestion adds a question to a quiz owned by the authenticated user.
+//
+// @Summary Создать вопрос
+// @Description Доступно только автору квиза. Тело запроса должно содержать один JSON-объект без неизвестных полей.
+// @Tags questions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body CreateQuestionRequest true "Новый вопрос"
+// @Success 201 "Вопрос создан; тело ответа пустое"
+// @Failure 400 {object} respond.ErrorResponse "Некорректный JSON, ID квиза или пустой текст"
+// @Failure 401 {object} respond.ErrorResponse "Недействительный токен или пользователь не является автором квиза"
+// @Failure 404 {object} respond.ErrorResponse "Квиз не найден"
+// @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
+// @Router /questions [post]
 func (h *QuestionHandler) CreateQuestion(w http.ResponseWriter, r *http.Request) {
 	userId, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
@@ -106,6 +135,20 @@ func (h *QuestionHandler) CreateQuestion(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusCreated)
 }
 
+// DeleteQuestion deletes a question owned by the authenticated user.
+//
+// @Summary Удалить вопрос
+// @Description Доступно только автору квиза.
+// @Tags questions
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID вопроса" minimum(1)
+// @Success 204 "Вопрос удалён; тело ответа пустое"
+// @Failure 400 {object} respond.ErrorResponse "Некорректный ID вопроса"
+// @Failure 401 {object} respond.ErrorResponse "Недействительный токен или пользователь не является автором квиза"
+// @Failure 404 {object} respond.ErrorResponse "Вопрос не найден"
+// @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
+// @Router /questions/{id} [delete]
 func (h *QuestionHandler) DeleteQuestion(w http.ResponseWriter, r *http.Request) {
 	userId, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
@@ -143,6 +186,22 @@ func (h *QuestionHandler) DeleteQuestion(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ChangeQuestionPosition reorders a question within its quiz.
+//
+// @Summary Изменить позицию вопроса
+// @Description Доступно только автору квиза. Позиция начинается с 1 и не может превышать число вопросов в квизе. Остальные вопросы сдвигаются. Тело запроса должно содержать один JSON-объект без неизвестных полей.
+// @Tags questions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID вопроса" minimum(1)
+// @Param request body ChangeQuestionPositionRequest true "Новая позиция"
+// @Success 204 "Позиция изменена; тело ответа пустое"
+// @Failure 400 {object} respond.ErrorResponse "Некорректный JSON, ID вопроса или позиция"
+// @Failure 401 {object} respond.ErrorResponse "Недействительный токен или пользователь не является автором квиза"
+// @Failure 404 {object} respond.ErrorResponse "Вопрос не найден"
+// @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
+// @Router /questions/{id}/position [patch]
 func (h *QuestionHandler) ChangeQuestionPosition(w http.ResponseWriter, r *http.Request) {
 	userId, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {

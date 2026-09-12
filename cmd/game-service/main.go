@@ -1,1 +1,1 @@
-package gameservice
+package main

@@ -3,14 +3,18 @@ package http
 import (
 	stdhttp "net/http"
 
+	_ "github.com/kungrem23/quizgo/docs"
 	"github.com/kungrem23/quizgo/internal/domain/quiz"
 	"github.com/kungrem23/quizgo/internal/http/handlers/auth"
 	quizhandler "github.com/kungrem23/quizgo/internal/http/handlers/quiz"
 	"github.com/kungrem23/quizgo/internal/http/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func NewQuizRouter(service *quiz.Service) stdhttp.Handler {
 	router := stdhttp.NewServeMux()
+
+	router.HandleFunc("GET /swagger/", httpSwagger.Handler(httpSwagger.URL("doc.json")))
 
 	authHandler := auth.NewAuthHandler(service)
 	quizHandler := quizhandler.NewQuizHandler(service)

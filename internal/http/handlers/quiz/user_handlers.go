@@ -17,6 +17,18 @@ func NewUserHandler(service userService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
+// GetUser returns a user's public profile.
+//
+// @Summary Получить пользователя
+// @Description Возвращает ID и имя пользователя. Хеш пароля не передаётся.
+// @Tags users
+// @Produce json
+// @Param id path int true "ID пользователя" minimum(1)
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} respond.ErrorResponse "Некорректный ID пользователя"
+// @Failure 404 {object} respond.ErrorResponse "Пользователь не найден"
+// @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
+// @Router /users/{id} [get]
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil || id <= 0 {
