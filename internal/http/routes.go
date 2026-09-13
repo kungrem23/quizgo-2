@@ -14,6 +14,9 @@ import (
 func NewQuizRouter(service *quiz.Service) stdhttp.Handler {
 	router := stdhttp.NewServeMux()
 
+	router.HandleFunc("GET /healthz", func(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
+		w.WriteHeader(stdhttp.StatusOK)
+	})
 	router.HandleFunc("GET /swagger/", httpSwagger.Handler(httpSwagger.URL("doc.json")))
 
 	authHandler := auth.NewAuthHandler(service)

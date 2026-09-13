@@ -9,6 +9,7 @@ import (
 	"github.com/kungrem23/quizgo/internal/config"
 	"github.com/kungrem23/quizgo/internal/domain/quiz"
 	quizhttp "github.com/kungrem23/quizgo/internal/http"
+	"github.com/kungrem23/quizgo/internal/http/middleware"
 	"github.com/kungrem23/quizgo/internal/platform/postgres"
 	imagestore "github.com/kungrem23/quizgo/internal/store/s3"
 )
@@ -48,6 +49,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	router = middleware.RequestLogger(router, log.Default())
 
 	address := ":" + config.HTTPPort
 	log.Printf("quiz service started on %s", address)
