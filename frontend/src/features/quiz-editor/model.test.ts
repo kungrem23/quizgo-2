@@ -19,6 +19,24 @@ function valid(): Draft {
   return { title: 'География', revision: 1, questions: [q] };
 }
 describe('quiz drafts', () => {
+  it('creates questions when randomUUID is unavailable', () => {
+    const original = globalThis.crypto.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const question = newQuestion();
+      expect(question.key).toBeTruthy();
+      expect(question.answers).toHaveLength(4);
+      expect(new Set(question.answers.map((answer) => answer.key)).size).toBe(4);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
   it('keeps changes when switching or reordering questions', () => {
     let v = valid();
     const key = v.questions[0].key;

@@ -14,13 +14,19 @@ export interface Draft {
   revision: number;
   questions: DraftQuestion[];
 }
+function newKey(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
+}
 export function newAnswer(): DraftAnswer {
-  return { id: 0, key: crypto.randomUUID(), text_content: '', is_correct: false };
+  return { id: 0, key: newKey(), text_content: '', is_correct: false };
 }
 export function newQuestion(): DraftQuestion {
   return {
     id: 0,
-    key: crypto.randomUUID(),
+    key: newKey(),
     text_content: '',
     image_id: '',
     time_limit: 20,
