@@ -32,10 +32,16 @@ Nginx раздаёт сборку Vite и проксирует `/api`, `/auth`, 
 
 ```sh
 docker compose logs -f          # логи всех сервисов
+docker compose logs -f backend  # логи только API
 docker compose ps              # состояние контейнеров
 docker compose down            # остановить и удалить контейнеры, сохранить данные
 docker compose up --build -d --wait  # пересобрать после изменения исходников
 ```
+
+Docker сохраняет stdout/stderr каждого сервиса через драйвер `json-file` и
+автоматически ротирует логи: по умолчанию хранится до трёх файлов по 10 MiB на
+контейнер. Лимиты можно изменить через `DOCKER_LOG_MAX_SIZE` и
+`DOCKER_LOG_MAX_FILES` в `.env`; после изменения пересоздайте контейнеры.
 
 Для полного сброса тестовой базы: `docker compose down -v` — эта команда
 удаляет том со всеми данными PostgreSQL; объекты S3 остаются в bucket. Docker запускает готовую сборку; для разработки
