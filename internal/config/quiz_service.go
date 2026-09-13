@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
+
+	imagestore "github.com/kungrem23/quizgo/internal/store/s3"
 )
 
 type QuizService struct {
 	HTTPPort string
 	Postgres Postgres
+	S3       imagestore.Config
 }
 
 type Postgres struct {
@@ -31,6 +35,20 @@ func LoadQuizService() (QuizService, error) {
 			Database: envOrDefault("POSTGRES_DB", "quizgo"),
 			SSLMode:  envOrDefault("POSTGRES_SSLMODE", "disable"),
 		},
+	}
+
+	config.S3 = imagestore.Config{
+		Bucket: os.Getenv("S3_BUCKET"), Region: envOrDefault("S3_REGION", "us-east-1"),
+		Endpoint: os.Getenv("S3_ENDPOINT"), BrowserEndpoint: os.Getenv("S3_BROWSER_ENDPOINT"),
+	}
+	var err error
+	config.S3.URLTTL, err = time.ParseDuration(envOrDefault("S3_URL_TTL", "1h"))
+	if err != nil || config.S3.URLTTL < time.Minute || config.S3.URLTTL > 7*24*time.Hour {
+		return QuizService{}, fmt.Errorf("S3_URL_TTL must be between 1m and 168h")
+	}
+	config.S3.ForcePathStyle, err = strconv.ParseBool(envOrDefault("S3_FORCE_PATH_STYLE", "false"))
+	if err != nil {
+		return QuizService{}, fmt.Errorf("S3_FORCE_PATH_STYLE must be true or false")
 	}
 
 	if err := validatePort("QUIZ_HTTP_PORT", config.HTTPPort); err != nil {

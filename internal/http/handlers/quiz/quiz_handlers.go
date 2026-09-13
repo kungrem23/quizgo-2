@@ -3,6 +3,7 @@ package quizhandler
 import (
 	"database/sql"
 	"strings"
+	"unicode/utf8"
 
 	// "encoding/json"
 	"errors"
@@ -79,7 +80,7 @@ type CreateQuizRequest struct {
 // @Produce json
 // @Security BearerAuth
 // @Param request body CreateQuizRequest true "Новый квиз"
-// @Success 201 "Квиз создан; тело ответа пустое"
+// @Success 201 {object} QuizResponse "Созданный квиз"
 // @Failure 400 {object} respond.ErrorResponse "Некорректный JSON или пустое название"
 // @Failure 401 {object} respond.ErrorResponse "Отсутствует или недействителен Bearer-токен"
 // @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
@@ -107,14 +108,19 @@ func (h *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	err = h.service.CreateQuiz(r.Context(), req.Title, authorId)
+	if utf8.RuneCountInString(req.Title) > 50 {
+		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{Error: "title too long"})
+		return
+	}
+	created, err := h.service.CreateQuiz(r.Context(), req.Title, authorId)
 	if err != nil {
 		respond.WriteJSON(w, http.StatusInternalServerError, respond.ErrorResponse{
 			Error: "server error",
 		})
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Location", "/api/quizzes/"+strconv.Itoa(created.Id))
+	respond.WriteJSON(w, http.StatusCreated, newQuizResponse(created))
 }
 
 // ListQuizzes returns all quizzes with their questions and public answers.

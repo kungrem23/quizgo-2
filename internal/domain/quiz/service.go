@@ -10,11 +10,16 @@ import (
 )
 
 type Service struct {
-	repo Repository
+	repo   Repository
+	images ImageStore
 }
 
-func NewService(r Repository) *Service {
-	return &Service{repo: r}
+func NewService(r Repository, stores ...ImageStore) *Service {
+	s := &Service{repo: r}
+	if len(stores) > 0 {
+		s.images = stores[0]
+	}
+	return s
 }
 
 // ==============QUIZ===============
@@ -23,7 +28,7 @@ func (s *Service) GetQuiz(ctx context.Context, id int) (Quiz, error) {
 	return s.repo.GetQuiz(ctx, id)
 }
 
-func (s *Service) CreateQuiz(ctx context.Context, title string, authorId int) error {
+func (s *Service) CreateQuiz(ctx context.Context, title string, authorId int) (Quiz, error) {
 	return s.repo.CreateQuiz(ctx, title, authorId)
 }
 
@@ -78,20 +83,6 @@ func (s *Service) GetAnswerAsAuthor(ctx context.Context, id, userId int) (Answer
 
 func (s *Service) ListAnswersByQuestionId(ctx context.Context, questionId int) ([]Answer, error) {
 	return s.repo.GetAnswersByQuestionId(ctx, questionId)
-}
-
-// ==============IMAGE===============
-
-func (s *Service) CreateImage(ctx context.Context, imageURL string) error {
-	return s.repo.CreateNewImage(ctx, imageURL)
-}
-
-func (s *Service) DeleteImage(ctx context.Context, id string) error {
-	return s.repo.DeleteImage(ctx, id)
-}
-
-func (s *Service) GetImage(ctx context.Context, id string) (Image, error) {
-	return s.repo.GetImage(ctx, id)
 }
 
 // ==============USER===============

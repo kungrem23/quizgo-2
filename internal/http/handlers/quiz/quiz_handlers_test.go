@@ -24,8 +24,9 @@ func (s quizServiceStub) GetQuiz(ctx context.Context, id int) (quiz.Quiz, error)
 	return s.getQuizFunc(ctx, id)
 }
 
-func (s quizServiceStub) CreateQuiz(ctx context.Context, title string, authorID int) error {
-	return s.createQuizFunc(ctx, title, authorID)
+func (s quizServiceStub) CreateQuiz(ctx context.Context, title string, authorID int) (quiz.Quiz, error) {
+	err := s.createQuizFunc(ctx, title, authorID)
+	return quiz.Quiz{Id: 7, Title: title, AuthorId: authorID, Questions: []*quiz.Question{}}, err
 }
 
 func (s quizServiceStub) ListQuizzes(ctx context.Context) ([]quiz.Quiz, error) {
@@ -115,7 +116,10 @@ func TestCreateQuiz_Success(t *testing.T) {
 
 	serveAuthenticated(NewQuizHandler(service).CreateQuiz, recorder, req)
 
-	assertEmptyResponse(t, recorder, http.StatusCreated)
+	assertDTOResponse(t, recorder, http.StatusCreated, newQuizResponse(quiz.Quiz{Id: 7, Title: "Geography", AuthorId: 42, Questions: []*quiz.Question{}}))
+	if recorder.Header().Get("Location") != "/api/quizzes/7" {
+		t.Error("missing resource location")
+	}
 	if !called {
 		t.Error("service was not called")
 	}

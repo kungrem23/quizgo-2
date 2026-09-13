@@ -1,7 +1,7 @@
 package quiz
 
 import (
-	// "database/sql"
+	"database/sql"
 	// "github.com/kungrem23/quizgo/internal/store/models"
 	"context"
 
@@ -178,7 +178,9 @@ func (r *PostgresRepository) GetQuestion(ctx context.Context, id int) (Question,
 	WHERE id=$1`
 	row := r.db.QueryRowContext(ctx, query, id)
 	var question Question
-	err := row.Scan(&question.Id, &question.TextContent, &question.Position, &question.ImageId, &question.QuizId)
+	var imageID sql.NullString
+	err := row.Scan(&question.Id, &question.TextContent, &question.Position, &imageID, &question.QuizId)
+	question.ImageId = imageID.String
 	// if err != nil {
 	// 	log.Printf("Scanning question(id=%v) error: %v", id, err)
 	// 	return question, err
@@ -197,7 +199,9 @@ func (r *PostgresRepository) GetAllQuestions(ctx context.Context) ([]Question, e
 	defer rows.Close()
 	for rows.Next() {
 		var q Question
-		err := rows.Scan(&q.Id, &q.TextContent, &q.Position, &q.ImageId, &q.QuizId)
+		var imageID sql.NullString
+		err := rows.Scan(&q.Id, &q.TextContent, &q.Position, &imageID, &q.QuizId)
+		q.ImageId = imageID.String
 		if err != nil {
 			// log.Printf("Scanning question error: %v", err)
 			return nil, err

@@ -2,7 +2,7 @@ package quiz
 
 import (
 	"context"
-	// "database/sql"
+	"database/sql"
 	// "fmt"
 	// "log"
 	// "github.com/kungrem23/quizgo/internal/store/models"
@@ -16,33 +16,17 @@ import (
 // 	return &QuizRepo{db: db}
 // }
 
-func (r *PostgresRepository) CreateQuiz(ctx context.Context, title string, userId int) error {
-	query := `INSERT INTO quizzes 
-	(title, author_id)
-	VALUES ($1, $2)
-	RETURNING (id, title, author_id)`
-	// var q quiz.Quiz
-	_, err := r.db.ExecContext(ctx, query, title, userId)
-	// quiz := models.NewQuiz()
-	// err := row.Scan(&quiz.Id, &quiz.Title, &quiz.AuthorId)
-	return err
+func (r *PostgresRepository) CreateQuiz(ctx context.Context, title string, userId int) (Quiz, error) {
+	q := Quiz{Questions: []*Question{}}
+	err := r.db.QueryRowContext(ctx, `INSERT INTO quizzes (title, author_id) VALUES ($1, $2) RETURNING id, title, author_id`, title, userId).Scan(&q.Id, &q.Title, &q.AuthorId)
+	return q, err
 }
-
-// func (r *QuizRepo) DeleteQuiz(id int) error {
-// 	query := "DELETE FROM quizzes WHERE id = $1;"
-// 	_, err := r.db.Exec(query, id)
-// 	if err != nil {
-// 		log.Printf("Deleting quiz error: %v\n", err)
-// 		return err
-// 	}
-// 	return nil
-// }
 
 func (r *PostgresRepository) GetQuizAnswers(ctx context.Context, quizId int, questionMap map[int]*Question) error {
 	query := `SELECT id, text_content, is_correct, question_id
 	FROM answers
 	WHERE question_id IN 
-	(SELECT id FROM questions WHERE quiz_id=$1)`
+	(SELECT id FROM questions WHERE quiz_id=$1) ORDER BY position, id`
 	rows, err := r.db.QueryContext(ctx, query, quizId)
 	if err != nil {
 		return err
@@ -76,7 +60,9 @@ func (r *PostgresRepository) GetQuizQuestions(ctx context.Context, quizId int) (
 	questionMap := make(map[int]*Question)
 	for rows.Next() {
 		qu := &Question{}
-		err := rows.Scan(&qu.Id, &qu.TextContent, &qu.Position, &qu.QuizId, &qu.ImageId)
+		var imageID sql.NullString
+		err := rows.Scan(&qu.Id, &qu.TextContent, &qu.Position, &qu.QuizId, &imageID)
+		qu.ImageId = imageID.String
 		if err != nil {
 			return nil, err
 		}

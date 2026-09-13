@@ -6,6 +6,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"net"
+	"net/url"
 	"time"
 
 	// "github.com/google/uuid"
@@ -26,12 +28,21 @@ type Config struct {
 	SSLMode  string
 }
 
+func connectionString(config Config) string {
+	dsn := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(config.User, config.Password),
+		Host:   net.JoinHostPort(config.Host, config.Port),
+		Path:   "/" + config.Database,
+	}
+	query := url.Values{}
+	query.Set("sslmode", config.SSLMode)
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
+}
+
 func ConnectPG(config Config) (*sql.DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.Database, config.SSLMode,
-	)
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", connectionString(config))
 	if err != nil {
 		return nil, fmt.Errorf("open PostgreSQL: %w", err)
 	}
@@ -44,7 +55,7 @@ func ConnectPG(config Config) (*sql.DB, error) {
 	return db, nil
 }
 
-func ApplyMigrations(db *sql.DB) error {
+func ApplyMigrations(db *sql.DB, images ...ImageUploader) error {
 	files, err := fs.Glob(migrationFiles, "migrations/*.sql")
 	if err != nil {
 		return fmt.Errorf("list migrations: %w", err)
@@ -53,6 +64,11 @@ func ApplyMigrations(db *sql.DB) error {
 		return fmt.Errorf("migration files not found")
 	}
 	for _, file := range files {
+		if file == "migrations/0003_s3_images.sql" && len(images) > 0 && images[0] != nil {
+			if err := migrateLegacyImages(db, images[0]); err != nil {
+				return err
+			}
+		}
 		content, err := migrationFiles.ReadFile(file)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", file, err)
@@ -65,12 +81,12 @@ func ApplyMigrations(db *sql.DB) error {
 	return nil
 }
 
-func NewDBConnection(config Config) (*sql.DB, error) {
+func NewDBConnection(config Config, images ...ImageUploader) (*sql.DB, error) {
 	db, err := ConnectPG(config)
 	if err != nil {
 		return nil, err
 	}
-	if err := ApplyMigrations(db); err != nil {
+	if err := ApplyMigrations(db, images...); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

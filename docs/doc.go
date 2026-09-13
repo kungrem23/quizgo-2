@@ -1,6 +1,6 @@
 // Package docs contains the generated Swagger documentation for the quiz CRUD API.
 //
-//go:generate go run github.com/swaggo/swag/cmd/swag@v1.16.6 init --generalInfo doc.go --dir .,../internal/http/handlers/quiz,../internal/http/middleware/respond --output . --parseInternal
+//go:generate go run github.com/swaggo/swag/cmd/swag@v1.16.6 init --generalInfo doc.go --dir .,../internal/http/handlers/quiz,../internal/http/middleware/respond,../internal/domain/quiz --output . --parseInternal
 package docs
 
 // @title QuizGo CRUD API

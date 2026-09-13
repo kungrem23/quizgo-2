@@ -1,5 +1,84 @@
 basePath: /api
 definitions:
+  quiz.ContentAnswer:
+    properties:
+      id:
+        type: integer
+      is_correct:
+        type: boolean
+      text_content:
+        type: string
+    type: object
+  quiz.ContentQuestion:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/quiz.ContentAnswer'
+        type: array
+      id:
+        type: integer
+      image_id:
+        type: string
+      image_url:
+        readOnly: true
+        type: string
+      text_content:
+        type: string
+      time_limit:
+        type: integer
+    type: object
+  quiz.QuizContent:
+    properties:
+      author_id:
+        type: integer
+      id:
+        type: integer
+      question_count:
+        type: integer
+      questions:
+        items:
+          $ref: '#/definitions/quiz.ContentQuestion'
+        type: array
+      revision:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  quiz.QuizSummary:
+    properties:
+      author_id:
+        type: integer
+      id:
+        type: integer
+      question_count:
+        type: integer
+      revision:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  quiz.SaveQuizContent:
+    properties:
+      questions:
+        items:
+          $ref: '#/definitions/quiz.ContentQuestion'
+        type: array
+      revision:
+        type: integer
+      title:
+        type: string
+    type: object
+  quiz.UploadedImage:
+    properties:
+      id:
+        type: string
+      url:
+        type: string
+    type: object
   quizhandler.AuthorAnswerResponse:
     properties:
       id:
@@ -81,6 +160,49 @@ definitions:
       text_content:
         example: Париж
         type: string
+    type: object
+  quizhandler.PublicContent:
+    properties:
+      author_id:
+        type: integer
+      id:
+        type: integer
+      question_count:
+        type: integer
+      questions:
+        items:
+          $ref: '#/definitions/quizhandler.PublicContentQuestion'
+        type: array
+      revision:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  quizhandler.PublicContentAnswer:
+    properties:
+      id:
+        type: integer
+      text_content:
+        type: string
+    type: object
+  quizhandler.PublicContentQuestion:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/quizhandler.PublicContentAnswer'
+        type: array
+      id:
+        type: integer
+      image_id:
+        type: string
+      image_url:
+        type: string
+      text_content:
+        type: string
+      time_limit:
+        type: integer
     type: object
   quizhandler.QuestionResponse:
     properties:
@@ -298,6 +420,152 @@ paths:
       summary: Получить ответ для автора
       tags:
       - answers
+  /images:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'JPG/PNG до 5 MiB, до 20 мегапикселей. Поле multipart: file. Возвращает
+        ID и временную ссылку S3.'
+      parameters:
+      - description: Изображение
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/quiz.UploadedImage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Загрузить изображение вопроса
+      tags:
+      - images
+  /images/{id}:
+    delete:
+      parameters:
+      - description: ID изображения
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить неиспользуемое изображение
+      tags:
+      - images
+    get:
+      parameters:
+      - description: ID изображения
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "307":
+          description: Перенаправление на временную ссылку S3
+          headers:
+            Location:
+              description: Ссылка S3
+              type: string
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+  /images/{id}/url:
+    get:
+      parameters:
+      - description: ID изображения
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/quiz.UploadedImage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      summary: Получить свежую ссылку на изображение
+      tags:
+      - images
+  /me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/quizhandler.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Текущий пользователь
+      tags:
+      - users
+  /me/quizzes:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/quiz.QuizSummary'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Мои квизы с количеством вопросов и датой изменения
+      tags:
+      - quizzes
   /questions:
     post:
       consumes:
@@ -490,7 +758,9 @@ paths:
       - application/json
       responses:
         "201":
-          description: Квиз создан; тело ответа пустое
+          description: Созданный квиз
+          schema:
+            $ref: '#/definitions/quizhandler.QuizResponse'
         "400":
           description: Некорректный JSON или пустое название
           schema:
@@ -509,6 +779,29 @@ paths:
       tags:
       - quizzes
   /quizzes/{id}:
+    delete:
+      parameters:
+      - description: ID квиза
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить квиз
+      tags:
+      - quizzes
     get:
       description: Возвращает квиз с вопросами и ответами без признака is_correct.
       parameters:
@@ -538,6 +831,106 @@ paths:
           schema:
             $ref: '#/definitions/respond.ErrorResponse'
       summary: Получить квиз
+      tags:
+      - quizzes
+  /quizzes/{id}/author:
+    get:
+      parameters:
+      - description: ID квиза
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/quiz.QuizContent'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Содержимое квиза для автора, включая правильные ответы
+      tags:
+      - quizzes
+  /quizzes/{id}/content:
+    get:
+      description: Порядок массивов соответствует порядку вопросов и ответов. is_correct
+        отсутствует.
+      parameters:
+      - description: ID квиза
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/quizhandler.PublicContent'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      summary: Содержимое квиза для просмотра
+      tags:
+      - quizzes
+    put:
+      consumes:
+      - application/json
+      description: 'Требуется актуальная revision, иначе 409. ID=0 создаёт элемент;
+        отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой
+        квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный.
+        Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120
+        секунд.'
+      parameters:
+      - description: ID квиза
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Содержимое и версия
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/quiz.SaveQuizContent'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/quiz.QuizContent'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Сохранить квиз целиком
       tags:
       - quizzes
   /users/{authorId}/quizzes:

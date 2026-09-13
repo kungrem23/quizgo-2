@@ -7,7 +7,7 @@ import (
 
 type quizService interface {
 	GetQuiz(ctx context.Context, id int) (quiz.Quiz, error)
-	CreateQuiz(ctx context.Context, title string, authorId int) error
+	CreateQuiz(ctx context.Context, title string, authorId int) (quiz.Quiz, error)
 	ListQuizzes(ctx context.Context) ([]quiz.Quiz, error)
 	ListQuizzesByAuthor(ctx context.Context, authorID int) ([]quiz.Quiz, error)
 }

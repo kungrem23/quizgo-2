@@ -4,110 +4,83 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/DATA-DOG/go-sqlmock"
 	"regexp"
 	"testing"
-
-	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// ============== CreateNewImage ==============
-
-func TestCreateNewImage_Success(t *testing.T) {
+func TestCreateImageRecordStoresOnlyIDAndOwner(t *testing.T) {
 	repo, mock, cleanup := newPostgresRepoMock(t)
 	defer cleanup()
-	const (
-		imageURL = "bebra.com"
-	)
-	query := regexp.QuoteMeta(`INSERT INTO images
-	(image_url)
-	VALUES ($1)
-	RETURNING id, image_url;`)
-	mock.ExpectExec(query).
-		WithArgs(imageURL).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	err := repo.CreateNewImage(context.Background(), imageURL)
-	if err != nil {
-		t.Fatalf("CreateNewImage error got: %v | expect: %v",
-			err, nil)
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO images (id, author_id) VALUES ($1,$2)`)).WithArgs("image-1", 42).WillReturnResult(sqlmock.NewResult(0, 1))
+	if err := repo.CreateImageRecord(context.Background(), "image-1", 42); err != nil {
+		t.Fatal(err)
 	}
 }
 
-// =============== DeleteImage ================
-
-func TestDeleteImage_Success(t *testing.T) {
-	repo, mock, cleanup := newPostgresRepoMock(t)
-	defer cleanup()
-	const (
-		imageId = "qwert"
-	)
-	query := regexp.QuoteMeta(`DELETE FROM images WHERE id = $1`)
-	mock.ExpectExec(query).
-		WithArgs(imageId).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	err := repo.DeleteImage(context.Background(), imageId)
-	if err != nil {
-		t.Fatalf("DeleteImage error got: %v | expect: %v",
-			err, nil)
+func TestImageExists(t *testing.T) {
+	for _, found := range []bool{true, false} {
+		repo, mock, cleanup := newPostgresRepoMock(t)
+		rows := sqlmock.NewRows([]string{"id"})
+		if found {
+			rows.AddRow("image-1")
+		}
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM images WHERE id=$1`)).WithArgs("image-1").WillReturnRows(rows)
+		err := repo.ImageExists(context.Background(), "image-1")
+		if found && err != nil || !found && !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("found=%v: %v", found, err)
+		}
+		cleanup()
 	}
 }
 
-func TestDeleteImage_NotFound(t *testing.T) {
-	repo, mock, cleanup := newPostgresRepoMock(t)
-	defer cleanup()
-	const (
-		imageId = "qwert"
-	)
-	query := regexp.QuoteMeta(`DELETE FROM images WHERE id = $1`)
-	mock.ExpectExec(query).
-		WithArgs(imageId).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	err := repo.DeleteImage(context.Background(), imageId)
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("DeleteImage error got: %v | expect: %v",
-			err, ErrNotFound)
-	}
-}
-
-// ================ GetImage ==================
-
-func TestGetImage_Success(t *testing.T) {
-	repo, mock, cleanup := newPostgresRepoMock(t)
-	defer cleanup()
-	const (
-		imageId  = "qwert"
-		imageURL = "bebra.com"
-	)
-	query := regexp.QuoteMeta(`SELECT id, image_url FROM images WHERE id=$1`)
-	mock.ExpectQuery(query).
-		WithArgs(imageId).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "image_url"}).
-			AddRow(imageId, imageURL))
-	want := Image{Id: imageId, ImageURL: imageURL}
-	got, err := repo.GetImage(context.Background(), imageId)
-	if err != nil {
-		t.Fatalf("DeleteImage error got: %v | expect: %v",
-			err, nil)
-	}
-	if got != want {
-		t.Fatalf("DeleteImage got: %#v | expect: %#v",
-			err, nil)
-	}
-}
-
-func TestGetImage_NotFound(t *testing.T) {
-	repo, mock, cleanup := newPostgresRepoMock(t)
-	defer cleanup()
-	const (
-		imageId  = "qwert"
-		imageURL = "bebra.com"
-	)
-	query := regexp.QuoteMeta(`SELECT id, image_url FROM images WHERE id=$1`)
-	mock.ExpectQuery(query).
-		WithArgs(imageId).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "image_url"}))
-	_, err := repo.GetImage(context.Background(), imageId)
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("DeleteImage error got: %v | expect: %v",
-			err, sql.ErrNoRows)
+func TestDeleteImageChecksOwnershipUsageAndKeepsRecordOnStorageFailure(t *testing.T) {
+	storageFailure := errors.New("S3 unavailable")
+	for _, scenario := range []string{"missing-or-other-owner", "in-use", "storage-failure", "success"} {
+		t.Run(scenario, func(t *testing.T) {
+			repo, mock, cleanup := newPostgresRepoMock(t)
+			defer cleanup()
+			mock.ExpectBegin()
+			ownerRows := sqlmock.NewRows([]string{"id"})
+			if scenario != "missing-or-other-owner" {
+				ownerRows.AddRow("image-1")
+			}
+			mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM images WHERE id=$1 AND author_id=$2 FOR UPDATE`)).WithArgs("image-1", 42).WillReturnRows(ownerRows)
+			if scenario != "missing-or-other-owner" {
+				mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM questions WHERE image_id=$1)`)).WithArgs("image-1").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(scenario == "in-use"))
+			}
+			if scenario == "success" {
+				mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM images WHERE id=$1 AND author_id=$2`)).WithArgs("image-1", 42).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			} else {
+				mock.ExpectRollback()
+			}
+			called := false
+			err := repo.DeleteUploadedImage(context.Background(), "image-1", 42, func(context.Context, string) error {
+				called = true
+				if scenario == "storage-failure" {
+					return storageFailure
+				}
+				return nil
+			})
+			switch scenario {
+			case "missing-or-other-owner":
+				if called || !errors.Is(err, sql.ErrNoRows) {
+					t.Fatalf("%v, called=%v", err, called)
+				}
+			case "in-use":
+				if called || !errors.Is(err, ErrImageInUse) {
+					t.Fatalf("%v, called=%v", err, called)
+				}
+			case "storage-failure":
+				if !called || !errors.Is(err, storageFailure) {
+					t.Fatal(err)
+				}
+			case "success":
+				if !called || err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }

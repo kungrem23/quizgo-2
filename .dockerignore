@@ -1,0 +1,12 @@
+.git
+.vscode
+**/.DS_Store
+**/.env
+**/.env.*
+frontend
+scripts
+quiz-service
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/*_test.go

@@ -1,62 +1,52 @@
 package quiz
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
-// "database/sql"
-// "github.com/kungrem23/quizgo/internal/store/models"
-// "log"
-
-// type ImageRepo struct {
-// 	db *sql.DB
-// }
-
-// func NewImageRepo(db *sql.DB) *ImageRepo {
-// 	return &ImageRepo{db: db}
-// }
-
-func (r *PostgresRepository) CreateNewImage(ctx context.Context, imageURL string) error {
-	query := `INSERT INTO images
-	(image_url)
-	VALUES ($1)
-	RETURNING id, image_url;`
-	_, err := r.db.ExecContext(ctx, query, imageURL)
-	// image := NewImage()
-	// err := row.Scan(&image.Id, &image.ImageURL)
-	// if err != nil {
-	// 	// log.Printf("Adding Image error: %v\n", err)
-	// 	return nil, err
-	// }
+func (r *PostgresRepository) CreateImageRecord(ctx context.Context, id string, userID int) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO images (id, author_id) VALUES ($1,$2)`, id, userID)
 	return err
 }
 
-func (r *PostgresRepository) DeleteImage(ctx context.Context, id string) error {
-	query := `DELETE FROM images WHERE id = $1`
-	res, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return ErrNotFound
-	}
-	// if err != nil {
-	// 	// log.Printf("Deleting image(id=%v) error: %v", id, err)
-	// 	return err
-	// }
-	return nil
+func (r *PostgresRepository) ImageExists(ctx context.Context, id string) error {
+	var found string
+	return r.db.QueryRowContext(ctx, `SELECT id FROM images WHERE id=$1`, id).Scan(&found)
 }
 
-func (r *PostgresRepository) GetImage(ctx context.Context, id string) (Image, error) {
-	query := `SELECT id, image_url FROM images WHERE id=$1`
-	row := r.db.QueryRowContext(ctx, query, id)
-	var image Image
-	err := row.Scan(&image.Id, &image.ImageURL)
-	// if err != nil {
-	// 	// log.Printf("Get image(id=%v) error: %v", id, err)
-	// 	return image, err
-	// }
-	return image, err
+// Keep the row locked while removing the object, preventing a concurrent save
+// from attaching it. A failed storage deletion leaves metadata available to retry.
+func (r *PostgresRepository) DeleteUploadedImage(ctx context.Context, id string, userID int, remove func(context.Context, string) error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var found string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM images WHERE id=$1 AND author_id=$2 FOR UPDATE`, id, userID).Scan(&found); err != nil {
+		return err
+	}
+	var inUse bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM questions WHERE image_id=$1)`, id).Scan(&inUse); err != nil {
+		return err
+	}
+	if inUse {
+		return ErrImageInUse
+	}
+	if err = remove(ctx, id); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM images WHERE id=$1 AND author_id=$2`, id, userID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return sql.ErrNoRows
+	}
+	return tx.Commit()
 }
