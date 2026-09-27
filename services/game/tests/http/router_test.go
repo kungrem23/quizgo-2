@@ -1,0 +1,41 @@
+package httptransport_test
+
+import . "github.com/kungrem23/quizgo/services/game/internal/transport/http"
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/kungrem23/quizgo/services/game/internal/application"
+	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+)
+
+type serviceStub struct{ request application.CreateGameRequest }
+
+func (s *serviceStub) CreateGame(_ context.Context, request application.CreateGameRequest) (game.Game, error) {
+	s.request = request
+	return game.Game{ID: "game-1", Code: "ABC123", Phase: game.PhaseLobby, Quiz: game.QuizSnapshot{Revision: 4}}, nil
+}
+
+func TestCreateGame(t *testing.T) {
+	service := &serviceStub{}
+	request := httptest.NewRequest(http.MethodPost, "/api/games", strings.NewReader(`{"quiz_id":7}`))
+	request.Header.Set("Authorization", "Bearer access-token")
+	response := httptest.NewRecorder()
+	New(service).ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || service.request.QuizID != 7 || service.request.AccessToken != "access-token" {
+		t.Fatalf("status=%d request=%#v body=%s", response.Code, service.request, response.Body.String())
+	}
+}
+
+func TestReadinessReportsFailedDependency(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	response := httptest.NewRecorder()
+	New(nil, Dependency{Name: "redis", Check: func(context.Context) error { return context.DeadlineExceeded }}).ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "redis") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}

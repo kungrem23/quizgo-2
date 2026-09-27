@@ -3,6 +3,6 @@
 internal/.DS_Store
 .env
 .env.*
-frontend/node_modules/
-frontend/dist/
-frontend/*.tsbuildinfo
+services/quiz/frontend/node_modules/
+services/quiz/frontend/dist/
+services/quiz/frontend/*.tsbuildinfo

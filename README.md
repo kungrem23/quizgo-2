@@ -1,7 +1,19 @@
 # QuizGo
 
-Go API и React-приложение для создания квизов. Frontend: React, TypeScript, Vite,
-Tailwind CSS, React Router, TanStack Query. Квизы хранятся в PostgreSQL, изображения — в S3.
+Проект разделён на два сервиса: `quiz` отвечает за CRUD и каталог квизов, `game` —
+за игровые сессии и будущий realtime-протокол. Они общаются только через контракт
+`api/quiz/v1/quiz.proto`; game не подключается к PostgreSQL quiz-сервиса.
+
+```text
+api/quiz/v1/             общий protobuf-контракт
+gen/quiz/v1/             сгенерированный Go-код
+services/quiz/           CRUD: main, internal, frontend и отдельный tests/
+services/game/           game: main, internal и отдельный tests/
+```
+
+Frontend quiz-сервиса использует React, TypeScript, Vite, Tailwind CSS, React Router
+и TanStack Query. Квизы хранятся в PostgreSQL, изображения — в S3, игровые снимки —
+в Redis.
 
 ## Запуск через Docker
 
@@ -19,21 +31,22 @@ docker compose up --build -d --wait
 Порт интерфейса задаётся через `FRONTEND_PORT` в `.env`. Зарегистрируйте аккаунт
 через интерфейс — база при первом запуске пустая.
 
-Compose собирает Go API и React-приложение, запускает PostgreSQL 18 и Nginx.
-Nginx раздаёт сборку Vite и проксирует `/api`, `/auth`, `/swagger` в backend;
+Compose собирает оба Go-сервиса и React-приложение, запускает PostgreSQL 18, Redis и Nginx.
+Nginx раздаёт сборку Vite и проксирует `/api`, `/auth`, `/swagger` в quiz-сервис;
 прямые ссылки React Router также работают. На хост публикуется только порт
 интерфейса, доступный локально. PostgreSQL и API доступны внутри Docker-сети.
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_SSLMODE` и `QUIZ_HTTP_PORT` из локального
 окружения для контейнеров переопределяются в Compose.
 
-Миграции применяются backend автоматически после готовности PostgreSQL.
+Миграции применяются quiz-сервисом автоматически после готовности PostgreSQL.
 Данные квизов и ссылки по ID сохраняются в томе `postgres_data` при пересоздании
 контейнеров. Файлы изображений хранятся отдельно, в настроенном S3 bucket. Параметры пользователя и пароля PostgreSQL задаются при первом
 создании тома: изменение `.env` само по себе пароль существующей базы не меняет.
 
 ```sh
 docker compose logs -f          # логи всех сервисов
-docker compose logs -f backend  # логи только API
+docker compose logs -f quiz     # логи CRUD API
+docker compose logs -f game     # логи game skeleton
 docker compose ps              # состояние контейнеров
 docker compose down            # остановить и удалить контейнеры, сохранить данные
 docker compose up --build -d --wait  # пересобрать после изменения исходников
@@ -43,8 +56,10 @@ Docker сохраняет stdout/stderr каждого сервиса через
 автоматически ротирует логи: по умолчанию хранится до трёх файлов по 10 MiB на
 контейнер. Лимиты можно изменить через `DOCKER_LOG_MAX_SIZE` и
 `DOCKER_LOG_MAX_FILES` в `.env`; после изменения пересоздайте контейнеры.
-Backend предоставляет `/healthz` для liveness и `/readyz` для проверки соединения
-с PostgreSQL. Docker healthcheck использует readiness. Backend пишет access-log каждого завершённого HTTP-запроса: метод, путь, шаблон
+Quiz предоставляет `/healthz` для liveness и `/readyz` для проверки PostgreSQL.
+Game публикует те же endpoints на `127.0.0.1:${GAME_PORT:-8081}`; его readiness
+проверяет Redis и gRPC health quiz-сервиса. Docker healthcheck использует readiness.
+Quiz пишет access-log каждого завершённого HTTP-запроса: метод, путь, шаблон
 маршрута, статус, размер ответа, длительность, IP клиента, `X-Request-ID` и
 User-Agent. Тела запросов, query-параметры и заголовок авторизации не логируются.
 Регулярные обращения Docker healthcheck к `/healthz` пропускаются.
@@ -148,30 +163,39 @@ export POSTGRES_SSLMODE=disable
 ```sh
 export JWT_SECRET="$(openssl rand -hex 32)"
 export QUIZ_GRPC_SERVICE_TOKEN="$(openssl rand -hex 32)"
-go run ./cmd/quiz-service
+go run ./services/quiz/cmd/quiz-service
+```
+
+Для game нужны Redis и уже запущенный quiz gRPC:
+
+```sh
+export QUIZ_GRPC_SERVICE_TOKEN="<тот же секрет, что у quiz>"
+export GAME_REDIS_ADDRESS=localhost:6379
+export GAME_QUIZ_GRPC_ADDRESS=localhost:9090
+go run ./services/game/cmd/game-service
 ```
 
 ```sh
-npm ci --prefix frontend
-npm run dev --prefix frontend
+npm ci --prefix services/quiz/frontend
+npm run dev --prefix services/quiz/frontend
 ```
 
 При запуске через `go run` или `scripts/dev.sh` переменные S3 нужно экспортировать
 в окружение процесса: `.env` автоматически читает только Docker Compose.
 
 Если API слушает другой порт, задайте `QUIZ_HTTP_PORT` для backend и
-`QUIZ_API_PROXY` для Vite (пример в `frontend/.env.example`). Запросы `/api`
+`QUIZ_API_PROXY` для Vite (пример в `services/quiz/frontend/.env.example`). Запросы `/api`
 и `/auth` идут через Vite proxy, CORS для локальной разработки не нужен.
 `VITE_*` переменные с секретами не используются.
 
 ## Готовая сборка на одном origin
 
 ```sh
-npm ci --prefix frontend
-npm run build --prefix frontend
-export QUIZ_FRONTEND_DIR=frontend/dist
+npm ci --prefix services/quiz/frontend
+npm run build --prefix services/quiz/frontend
+export QUIZ_FRONTEND_DIR=services/quiz/frontend/dist
 # Задайте постоянные JWT_SECRET, QUIZ_GRPC_SERVICE_TOKEN и параметры PostgreSQL.
-go run ./cmd/quiz-service
+go run ./services/quiz/cmd/quiz-service
 ```
 
 API раздаёт статические файлы и поддерживает прямое открытие React Router-маршрутов,
@@ -268,17 +292,21 @@ Caddy хранятся в volumes `caddy_data` и `caddy_config`; не удал�
 ответов и ровно один правильный. Максимум 100 вопросов, 50 символов в названии,
 200 символов в вопросе/ответе. Порядок элементов сохраняется без смены существующих ID.
 
-Игровые сессии и WebSocket остаются отдельным этапом. Раздел «Открытия» обозначен
-как будущая возможность. Изображения, отвязанные от вопросов, автоматически не удаляются:
+Game skeleton уже умеет создать сессию через `POST /api/games`: он передаёт JWT
+пользователя в quiz gRPC, получает проверенный снимок и сохраняет его в Redis с TTL.
+WebSocket endpoint `/ws` пока возвращает `501`; игровой цикл, подключение игроков и
+рассылка событий остаются следующим этапом. Раздел «Открытия» обозначен как будущая
+возможность. Изображения, отвязанные от вопросов, автоматически не удаляются:
 для неиспользуемых загрузок предусмотрен `DELETE /api/images/{id}`.
 
 ## Проверки
 
 ```sh
-npm run test --prefix frontend
-npm run lint --prefix frontend
-npm run build --prefix frontend
-go test ./cmd/... ./internal/... ./docs/...
+npm run test --prefix services/quiz/frontend
+npm run lint --prefix services/quiz/frontend
+npm run build --prefix services/quiz/frontend
+go test ./services/quiz/cmd/... ./services/quiz/internal/... ./services/quiz/docs/... \
+  ./services/quiz/tests/... ./services/game/... ./gen/...
 ```
 
 Интеграционный HTTP-тест с реальным PostgreSQL создаёт отдельную случайную схему
@@ -286,7 +314,7 @@ go test ./cmd/... ./internal/... ./docs/...
 
 ```sh
 QUIZ_TEST_POSTGRES_DSN='postgres://user:password@localhost:5432/testdb?sslmode=disable' \
-  go test ./internal/http -run TestEditorPostgresLifecycle -count=1 -v
+  go test ./services/quiz/tests/http -run TestEditorPostgresLifecycle -count=1 -v
 ```
 
 Проверяются авторизация, CRUD, конфликты, откат транзакции, сохранение ID при перестановке,
@@ -294,4 +322,5 @@ QUIZ_TEST_POSTGRES_DSN='postgres://user:password@localhost:5432/testdb?sslmode=d
 каскадное удаление и повторное применение миграций. Frontend-тесты проверяют черновики,
 переключение вопросов, восстановление, выбор правильного ответа, сохранение и ошибки сети.
 
-Swagger: `/swagger/index.html`. Контракты и изменения API — в [docs/README.md](docs/README.md).
+Swagger: `/swagger/index.html`. Контракты и изменения API — в [services/quiz/docs/README.md](services/quiz/docs/README.md).
+Каркас игрового сервиса описан в [services/game/README.md](services/game/README.md).

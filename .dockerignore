@@ -3,7 +3,7 @@
 **/.DS_Store
 **/.env
 **/.env.*
-frontend
+services/quiz/frontend
 scripts
 quiz-service
 **/node_modules
