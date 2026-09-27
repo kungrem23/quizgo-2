@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/kungrem23/quizgo/internal/authn"
 	"github.com/kungrem23/quizgo/internal/utils"
 )
 
@@ -14,6 +16,17 @@ type serviceRepoStub struct {
 
 	getUserByUsernameFunc func(context.Context, string) (User, error)
 	createNewUserFunc     func(context.Context, string, string) error
+}
+
+func serviceTestTokens(t *testing.T) *authn.Manager {
+	t.Helper()
+	manager, err := authn.NewManager(authn.Config{
+		Secret: "0123456789abcdef0123456789abcdef", Issuer: "quizgo", Audience: "quizgo-test", TTL: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manager
 }
 
 func (r serviceRepoStub) GetUserByUsername(
@@ -51,7 +64,7 @@ func TestServiceLogin_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	service := NewService(repo)
+	service := NewServiceWithTokens(repo, nil, serviceTestTokens(t))
 	token, err := service.Login(context.Background(), username, password)
 	if err != nil {
 		t.Fatalf("ServiceLogin error got: %v | expect: %v", err, nil)

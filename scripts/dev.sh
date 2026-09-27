@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ ! -d frontend/node_modules ]]; then npm ci --prefix frontend; fi
 if [[ -z "${JWT_SECRET:-}" ]]; then export JWT_SECRET="$(openssl rand -hex 32)"; fi
+if [[ -z "${QUIZ_GRPC_SERVICE_TOKEN:-}" ]]; then export QUIZ_GRPC_SERVICE_TOKEN="$(openssl rand -hex 32)"; fi
 export QUIZ_API_PROXY="http://127.0.0.1:${QUIZ_HTTP_PORT:-8080}"
 quizgo_api_pid=''
 quizgo_frontend_pid=''

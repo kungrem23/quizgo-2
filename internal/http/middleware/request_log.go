@@ -47,7 +47,7 @@ func (w *loggingResponseWriter) Unwrap() http.ResponseWriter {
 // healthcheck endpoint is intentionally omitted to avoid routine log noise.
 func RequestLogger(next http.Handler, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 			next.ServeHTTP(w, r)
 			return
 		}

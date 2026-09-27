@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/kungrem23/quizgo/internal/http/middleware/respond"
-	"github.com/kungrem23/quizgo/internal/utils"
 )
 
 var ErrInvalidToken error = errors.New("Invalid token")
@@ -23,40 +21,21 @@ func UserIDFromContext(ctx context.Context) (int, bool) {
 	return id, ok
 }
 
-func userIDFromToken(token *jwt.Token) (int, error) {
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return 0, ErrInvalidToken
-	}
-	idValue, ok := claims["id"]
-	if !ok {
-		return 0, ErrInvalidToken
-	}
-	idFloat, ok := idValue.(float64)
-	if !ok {
-		return 0, ErrInvalidToken
-	}
-	return int(idFloat), nil
+type AccessTokenVerifier interface {
+	VerifyAccessToken(string) (int, error)
 }
 
-func Auth(next http.Handler) http.Handler {
+func Auth(verifier AccessTokenVerifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		parts := strings.Fields(authHeader)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || verifier == nil {
 			respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{
 				Error: "invalid token",
 			})
 			return
 		}
-		token, err := utils.ParseJWT(parts[1])
-		if err != nil || !token.Valid {
-			respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{
-				Error: "invalid token",
-			})
-			return
-		}
-		userID, err := userIDFromToken(token)
+		userID, err := verifier.VerifyAccessToken(parts[1])
 		if err != nil {
 			respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{
 				Error: "invalid token",

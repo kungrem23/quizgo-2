@@ -25,13 +25,16 @@ export function AuthForm({
       setError('Имя: 3–40 символов. Используйте латинские буквы, цифры или . _ - # $ !');
       return;
     }
+    const minimumPasswordLength = register ? 8 : 3;
     if (
-      password.trim().length < 3 ||
-      password.trim().length > 40 ||
+      password.trim().length < minimumPasswordLength ||
+      password.trim().length > 72 ||
       /[^\x21-\x7E]/.test(password.trim()) ||
       password.includes('`')
     ) {
-      setError('Пароль: 3–40 символов. Используйте латинские буквы, цифры и знаки без пробелов.');
+      setError(
+        `Пароль: ${minimumPasswordLength}–72 символа. Используйте латинские буквы, цифры и знаки без пробелов.`,
+      );
       return;
     }
     setPending(true);
@@ -65,8 +68,8 @@ export function AuthForm({
           placeholder="Например, alex"
           autoComplete="username"
           required
-          minLength={3}
-          maxLength={40}
+          minLength={register ? 8 : 3}
+          maxLength={72}
           readOnly={!!lockedUsername}
           disabled={pending}
         />

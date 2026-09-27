@@ -5,6 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd/ ./cmd/
+COPY gen/ ./gen/
 COPY internal/ ./internal/
 COPY docs/ ./docs/
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -17,5 +18,5 @@ RUN apk add --no-cache ca-certificates \
 COPY --from=build /out/quiz-service /usr/local/bin/quiz-service
 USER quizgo
 ENV QUIZ_HTTP_PORT=8080
-EXPOSE 8080
+EXPOSE 8080 9090
 ENTRYPOINT ["quiz-service"]

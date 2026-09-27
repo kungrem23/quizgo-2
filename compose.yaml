@@ -46,6 +46,12 @@ services:
     logging: *default-logging
     environment:
       QUIZ_HTTP_PORT: "8080"
+      QUIZ_GRPC_PORT: "9090"
+      QUIZ_GRPC_SERVICE_TOKEN: ${QUIZ_GRPC_SERVICE_TOKEN:?Set QUIZ_GRPC_SERVICE_TOKEN in .env}
+      QUIZ_GRPC_TLS_CERT_FILE: ${QUIZ_GRPC_TLS_CERT_FILE:-}
+      QUIZ_GRPC_TLS_KEY_FILE: ${QUIZ_GRPC_TLS_KEY_FILE:-}
+      QUIZ_GRPC_TLS_CLIENT_CA_FILE: ${QUIZ_GRPC_TLS_CLIENT_CA_FILE:-}
+      QUIZ_GRPC_ALLOWED_CLIENT_URI: ${QUIZ_GRPC_ALLOWED_CLIENT_URI:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: ${POSTGRES_DB:-quizgo}
@@ -53,6 +59,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_SSLMODE: disable
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_ISSUER: ${JWT_ISSUER:-quizgo-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-quizgo-crud}
+      JWT_TTL: ${JWT_TTL:-15m}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
@@ -66,7 +75,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
       interval: 10s
       timeout: 3s
       retries: 5

@@ -6,12 +6,14 @@ import (
 	// "regexp"
 	"errors"
 
+	"github.com/kungrem23/quizgo/internal/authn"
 	"github.com/kungrem23/quizgo/internal/utils"
 )
 
 type Service struct {
 	repo   Repository
 	images ImageStore
+	tokens *authn.Manager
 }
 
 func NewService(r Repository, stores ...ImageStore) *Service {
@@ -20,6 +22,17 @@ func NewService(r Repository, stores ...ImageStore) *Service {
 		s.images = stores[0]
 	}
 	return s
+}
+
+func NewServiceWithTokens(r Repository, images ImageStore, tokens *authn.Manager) *Service {
+	return &Service{repo: r, images: images, tokens: tokens}
+}
+
+func (s *Service) VerifyAccessToken(raw string) (int, error) {
+	if s == nil || s.tokens == nil {
+		return 0, authn.ErrInvalidToken
+	}
+	return s.tokens.VerifyAccessToken(raw)
 }
 
 // ==============QUIZ===============
@@ -115,7 +128,7 @@ var ErrInvalidPassword = errors.New("invalid password")
 func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
 	user, err := s.GetUserByUsername(ctx, username)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrInvalidUsername
 		} else {
 			return "", err
@@ -125,7 +138,10 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 	if !utils.CheckPasswordHash(password, user.PasswordHash) {
 		return "", ErrInvalidPassword
 	}
-	return utils.GenerateJWT(user.Id)
+	if s.tokens == nil {
+		return "", authn.ErrInvalidToken
+	}
+	return s.tokens.IssueAccessToken(user.Id)
 }
 
 var ErrTakenUsername = errors.New("user with this username already exists")
@@ -135,7 +151,7 @@ func (s *Service) Register(ctx context.Context, username, password string) error
 	if err == nil {
 		return ErrTakenUsername
 	}
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		passwordHash, err := utils.HashPassword(password)
 		if err != nil {
 			return err

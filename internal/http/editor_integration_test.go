@@ -15,8 +15,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/kungrem23/quizgo/internal/authn"
 	"github.com/kungrem23/quizgo/internal/domain/quiz"
 	"github.com/kungrem23/quizgo/internal/platform/postgres"
 )
@@ -58,7 +60,13 @@ func TestEditorPostgresLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	images := &testImageStore{objects: map[string][]byte{}}
-	router := NewQuizRouter(quiz.NewService(quiz.NewPostgresRepository(db), images))
+	tokens, err := authn.NewManager(authn.Config{
+		Secret: "0123456789abcdef0123456789abcdef", Issuer: "quizgo", Audience: "quizgo-test", TTL: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := NewQuizRouter(quiz.NewServiceWithTokens(quiz.NewPostgresRepository(db), images, tokens))
 	call := func(method, path, token string, body any, status int) []byte {
 		t.Helper()
 		var data []byte

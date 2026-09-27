@@ -1,6 +1,8 @@
 package http
 
 import (
+	"context"
+	"errors"
 	stdhttp "net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +21,8 @@ func TestNewQuizRouter_RegistersRoutes(t *testing.T) {
 		status int
 	}{
 		{name: "login", method: stdhttp.MethodPost, path: "/auth/login", status: stdhttp.StatusBadRequest},
+		{name: "liveness", method: stdhttp.MethodGet, path: "/healthz", status: stdhttp.StatusOK},
+		{name: "readiness", method: stdhttp.MethodGet, path: "/readyz", status: stdhttp.StatusOK},
 		{name: "register", method: stdhttp.MethodPost, path: "/auth/register", status: stdhttp.StatusBadRequest},
 		{name: "create quiz protected", method: stdhttp.MethodPost, path: "/api/quizzes", status: stdhttp.StatusUnauthorized},
 		{name: "list quizzes route", method: stdhttp.MethodPut, path: "/api/quizzes", status: stdhttp.StatusMethodNotAllowed},
@@ -44,6 +48,17 @@ func TestNewQuizRouter_RegistersRoutes(t *testing.T) {
 				t.Fatalf("status = %d, want %d; body = %q", recorder.Code, tt.status, recorder.Body.String())
 			}
 		})
+	}
+}
+
+func TestNewQuizRouter_ReadinessFailure(t *testing.T) {
+	router := NewQuizRouterWithReadiness(quiz.NewService(nil), func(context.Context) error {
+		return errors.New("database unavailable")
+	})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(stdhttp.MethodGet, "/readyz", nil))
+	if recorder.Code != stdhttp.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, stdhttp.StatusServiceUnavailable)
 	}
 }
 

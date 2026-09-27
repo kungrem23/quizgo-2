@@ -6,8 +6,9 @@ Tailwind CSS, React Router, TanStack Query. Квизы хранятся в Postg
 ## Запуск через Docker
 
 Требуется запущенный Docker с Compose v2. При первой настройке скопируйте
-`.env.example` в `.env` (если своего `.env` ещё нет), заполните `POSTGRES_PASSWORD`
-и `JWT_SECRET`. Для каждого значения можно выполнить `openssl rand -hex 32`.
+`.env.example` в `.env` (если своего `.env` ещё нет), заполните `POSTGRES_PASSWORD`,
+`JWT_SECRET` и отдельный `QUIZ_GRPC_SERVICE_TOKEN`. Для каждого значения можно
+выполнить `openssl rand -hex 32`.
 Храните ключ в `.env`, чтобы вход не сбрасывался при перезапуске контейнеров.
 
 ```sh
@@ -42,7 +43,8 @@ Docker сохраняет stdout/stderr каждого сервиса через
 автоматически ротирует логи: по умолчанию хранится до трёх файлов по 10 MiB на
 контейнер. Лимиты можно изменить через `DOCKER_LOG_MAX_SIZE` и
 `DOCKER_LOG_MAX_FILES` в `.env`; после изменения пересоздайте контейнеры.
-Backend пишет access-log каждого завершённого HTTP-запроса: метод, путь, шаблон
+Backend предоставляет `/healthz` для liveness и `/readyz` для проверки соединения
+с PostgreSQL. Docker healthcheck использует readiness. Backend пишет access-log каждого завершённого HTTP-запроса: метод, путь, шаблон
 маршрута, статус, размер ответа, длительность, IP клиента, `X-Request-ID` и
 User-Agent. Тела запросов, query-параметры и заголовок авторизации не логируются.
 Регулярные обращения Docker healthcheck к `/healthz` пропускаются.
@@ -145,6 +147,7 @@ export POSTGRES_SSLMODE=disable
 
 ```sh
 export JWT_SECRET="$(openssl rand -hex 32)"
+export QUIZ_GRPC_SERVICE_TOKEN="$(openssl rand -hex 32)"
 go run ./cmd/quiz-service
 ```
 
@@ -167,13 +170,56 @@ npm run dev --prefix frontend
 npm ci --prefix frontend
 npm run build --prefix frontend
 export QUIZ_FRONTEND_DIR=frontend/dist
-# Задайте постоянный JWT_SECRET и параметры PostgreSQL в окружении сервера.
+# Задайте постоянные JWT_SECRET, QUIZ_GRPC_SERVICE_TOKEN и параметры PostgreSQL.
 go run ./cmd/quiz-service
 ```
 
 API раздаёт статические файлы и поддерживает прямое открытие React Router-маршрутов,
 например `/quizzes/1/edit`. `/api`, `/auth`, `/swagger` сохраняют свою маршрутизацию.
 Внешний HTTP-сервер может завершать TLS и проксировать запросы к Go-сервису.
+
+## Внутренний gRPC API
+
+CRUD-сервис одновременно слушает HTTP (`QUIZ_HTTP_PORT`, по умолчанию `8080`) и
+закрытый gRPC (`QUIZ_GRPC_PORT`, по умолчанию `9090`). Контракт realtime-сервиса:
+`api/quiz/v1/quiz.proto`. RPC `GetPlayableQuiz` возвращает консистентный снимок
+квиза с revision, порядком вопросов и ответов, лимитами времени и правильными
+ответами. Подписанные S3 URL в снимок не входят: передаётся стабильный `image_id`.
+
+Вызов требует две независимые учётные записи в metadata:
+
+```text
+x-quizgo-service-token: <QUIZ_GRPC_SERVICE_TOKEN>
+authorization: Bearer <пользовательский JWT>
+```
+
+Service token должен быть отдельным случайным секретом не короче 32 байт. CRUD
+сам проверяет пользовательский JWT и право собственности; `user_id` от realtime
+не принимается. Невалидный или пустой квиз возвращает `FailedPrecondition`, чужой —
+`PermissionDenied`. Realtime должен получить снимок один раз при создании игры и
+сохранить его у себя, чтобы редактирование исходного квиза не влияло на сессию.
+
+Без TLS gRPC допустим только в доверенной локальной сети разработки. Для production
+задайте одновременно `QUIZ_GRPC_TLS_CERT_FILE`, `QUIZ_GRPC_TLS_KEY_FILE`,
+`QUIZ_GRPC_TLS_CLIENT_CA_FILE` и URI SAN клиентского сертификата realtime в
+`QUIZ_GRPC_ALLOWED_CLIENT_URI`. Тогда CRUD требует валидный клиентский сертификат,
+точное совпадение URI SAN и service token. Health service доступен без пользовательского
+JWT, но не раскрывает содержимое квизов. В Docker значения `*_FILE` являются путями
+внутри backend-контейнера; сертификаты нужно смонтировать read-only средствами
+конкретного deployment.
+
+Контракт проверяется и генерируется через Buf:
+
+```sh
+go run github.com/bufbuild/buf/cmd/buf@v1.61.0 lint
+go run github.com/bufbuild/buf/cmd/buf@v1.61.0 generate
+```
+
+JWT теперь проверяет точный алгоритм HS256, issuer, audience, тип access-токена,
+срок действия и subject. `JWT_SECRET` остаётся только в CRUD; realtime пересылает
+пользовательский токен как непрозрачное значение и не получает возможность выпускать
+токены самостоятельно. Токены старого формата после обновления не принимаются;
+пользователям потребуется войти заново.
 
 ## HTTPS через Docker Compose
 

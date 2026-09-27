@@ -11,11 +11,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/kungrem23/quizgo/internal/authn"
 	"github.com/kungrem23/quizgo/internal/domain/quiz"
 	"github.com/kungrem23/quizgo/internal/http/middleware"
 	"github.com/kungrem23/quizgo/internal/http/middleware/respond"
-	"github.com/kungrem23/quizgo/internal/utils"
 )
 
 type answerServiceStub struct {
@@ -45,7 +46,8 @@ func (s answerServiceStub) GetAnswerAsAuthor(ctx context.Context, id, userID int
 
 func authenticatedRequest(t *testing.T, method, target, body string) *http.Request {
 	t.Helper()
-	token, err := utils.GenerateJWT(42)
+	manager := testTokenManager(t)
+	token, err := manager.IssueAccessToken(42)
 	if err != nil {
 		t.Fatalf("generate JWT: %v", err)
 	}
@@ -54,8 +56,22 @@ func authenticatedRequest(t *testing.T, method, target, body string) *http.Reque
 	return req
 }
 
+func testTokenManager(t *testing.T) *authn.Manager {
+	t.Helper()
+	manager, err := authn.NewManager(authn.Config{
+		Secret: "0123456789abcdef0123456789abcdef", Issuer: "quizgo", Audience: "quizgo-test", TTL: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manager
+}
+
 func serveAuthenticated(handler http.HandlerFunc, recorder *httptest.ResponseRecorder, request *http.Request) {
-	middleware.Auth(handler).ServeHTTP(recorder, request)
+	manager, _ := authn.NewManager(authn.Config{
+		Secret: "0123456789abcdef0123456789abcdef", Issuer: "quizgo", Audience: "quizgo-test", TTL: time.Minute,
+	})
+	middleware.Auth(manager, handler).ServeHTTP(recorder, request)
 }
 
 func assertDTOResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder, status int, want T) {

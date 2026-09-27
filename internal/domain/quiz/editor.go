@@ -12,6 +12,8 @@ import (
 var ErrContentInvalid = errors.New("invalid quiz content")
 var ErrContentConflict = errors.New("quiz has changed")
 var ErrImageInUse = errors.New("image is in use")
+var ErrQuizNotPlayable = errors.New("quiz is not playable")
+var ErrNotQuizOwner = errors.New("quiz belongs to another user")
 
 type QuizSummary struct {
 	ID            int       `json:"id"`
@@ -40,6 +42,35 @@ type ContentAnswer struct {
 	ID          int    `json:"id"`
 	TextContent string `json:"text_content"`
 	IsCorrect   bool   `json:"is_correct"`
+}
+
+func (v QuizContent) ValidatePlayable() error {
+	if strings.TrimSpace(v.Title) == "" || len(v.Questions) == 0 || len(v.Questions) > 100 {
+		return ErrQuizNotPlayable
+	}
+	for _, question := range v.Questions {
+		if question.ID < 1 || strings.TrimSpace(question.TextContent) == "" || len(question.Answers) < 2 || len(question.Answers) > 8 {
+			return ErrQuizNotPlayable
+		}
+		switch question.TimeLimit {
+		case 5, 10, 15, 20, 30, 45, 60, 90, 120:
+		default:
+			return ErrQuizNotPlayable
+		}
+		correct := 0
+		for _, answer := range question.Answers {
+			if answer.ID < 1 || strings.TrimSpace(answer.TextContent) == "" {
+				return ErrQuizNotPlayable
+			}
+			if answer.IsCorrect {
+				correct++
+			}
+		}
+		if correct != 1 {
+			return ErrQuizNotPlayable
+		}
+	}
+	return nil
 }
 
 // Array order is the persisted order; zero IDs represent new items.
@@ -100,6 +131,25 @@ func (s *Service) GetQuizContent(ctx context.Context, id int) (QuizContent, erro
 		return v, err
 	}
 	return v, s.resolveImages(ctx, v.Questions)
+}
+
+// GetPlayableQuiz returns a database-consistent snapshot for a new game. Images
+// remain references by ID so the snapshot never embeds an expiring signed URL.
+func (s *Service) GetPlayableQuiz(ctx context.Context, id, userID int) (QuizContent, error) {
+	v, err := s.repo.GetQuizContent(ctx, id)
+	if err != nil {
+		return v, err
+	}
+	if v.AuthorID != userID {
+		return QuizContent{}, ErrNotQuizOwner
+	}
+	if err := v.ValidatePlayable(); err != nil {
+		return QuizContent{}, err
+	}
+	for i := range v.Questions {
+		v.Questions[i].ImageURL = ""
+	}
+	return v, nil
 }
 func (s *Service) ListQuizSummaries(ctx context.Context, userID int) ([]QuizSummary, error) {
 	return s.repo.ListQuizSummaries(ctx, userID)

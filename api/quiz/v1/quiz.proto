@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package quiz.v1;
+
+option go_package = "github.com/kungrem23/quizgo/gen/quiz/v1;quizv1";
+
+// QuizCatalogService is the private read boundary used by the realtime service.
+service QuizCatalogService {
+  rpc GetPlayableQuiz(GetPlayableQuizRequest) returns (GetPlayableQuizResponse);
+}
+
+message GetPlayableQuizRequest {
+  int64 quiz_id = 1;
+}
+
+message GetPlayableQuizResponse {
+  PlayableQuiz quiz = 1;
+}
+
+message PlayableQuiz {
+  int64 id = 1;
+  int64 revision = 2;
+  string title = 3;
+  int64 owner_user_id = 4;
+  repeated PlayableQuestion questions = 5;
+}
+
+message PlayableQuestion {
+  int64 id = 1;
+  string text = 2;
+  string image_id = 3;
+  uint32 time_limit_seconds = 4;
+  repeated PlayableAnswer answers = 5;
+}
+
+message PlayableAnswer {
+  int64 id = 1;
+  string text = 2;
+  bool is_correct = 3;
+}
