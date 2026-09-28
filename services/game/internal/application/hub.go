@@ -332,20 +332,20 @@ func (r *room) run() {
 		}
 	}()
 	for {
+		now := time.Now()
+		if !r.transitionRetryAt.After(now) {
+			if err := r.advanceExpiredTimedPhases(now); err != nil {
+				r.transitionRetryAt = now.Add(500 * time.Millisecond)
+			} else {
+				r.transitionRetryAt = time.Time{}
+			}
+		}
+
 		var timerC <-chan time.Time
 		if deadline := r.transitionDeadline(); deadline != nil {
 			target := *deadline
 			if r.transitionRetryAt.After(target) {
 				target = r.transitionRetryAt
-			}
-			now := time.Now()
-			if !target.After(now) {
-				if err := r.advanceTimedPhase(now); err != nil {
-					r.transitionRetryAt = now.Add(500 * time.Millisecond)
-				} else {
-					r.transitionRetryAt = time.Time{}
-				}
-				continue
 			}
 			delay := time.Until(target)
 			if timer == nil {
@@ -379,18 +379,18 @@ func (r *room) run() {
 			}
 			if request.kind == "authenticate" {
 				now := time.Now()
-				if deadline := r.transitionDeadline(); deadline != nil && !deadline.After(now) && !r.transitionRetryAt.After(now) {
-					if err := r.advanceTimedPhase(now); err != nil {
-						r.transitionRetryAt = now.Add(500 * time.Millisecond)
-					} else {
-						r.transitionRetryAt = time.Time{}
-					}
+				if err := r.advanceExpiredTimedPhases(now); err != nil {
+					r.transitionRetryAt = now.Add(500 * time.Millisecond)
+					r.respond(request, roomResponse{err: err})
+					continue
 				}
+				r.transitionRetryAt = time.Time{}
 			}
 			r.handle(request)
-		case transitionedAt := <-timerC:
-			if err := r.advanceTimedPhase(transitionedAt); err != nil {
-				r.transitionRetryAt = time.Now().Add(500 * time.Millisecond)
+		case <-timerC:
+			now := time.Now()
+			if err := r.advanceExpiredTimedPhases(now); err != nil {
+				r.transitionRetryAt = now.Add(500 * time.Millisecond)
 			} else {
 				r.transitionRetryAt = time.Time{}
 			}
@@ -617,6 +617,21 @@ func (r *room) advanceTimedPhase(now time.Time) error {
 		return r.closeExpiredQuestion(now)
 	default:
 		return nil
+	}
+}
+
+// advanceExpiredTimedPhases catches a restored room up to wall-clock time. Each
+// transition is anchored to its persisted deadline instead of recovery time, so
+// a late countdown can immediately flow through an already expired question.
+func (r *room) advanceExpiredTimedPhases(now time.Time) error {
+	for {
+		deadline := r.transitionDeadline()
+		if deadline == nil || deadline.After(now) {
+			return nil
+		}
+		if err := r.advanceTimedPhase(*deadline); err != nil {
+			return err
+		}
 	}
 }
 

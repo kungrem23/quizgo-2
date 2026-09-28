@@ -20,8 +20,9 @@ func (c catalogStub) GetPlayableQuiz(context.Context, int64, string) (game.QuizS
 }
 
 type repositoryStub struct {
-	mu    sync.Mutex
-	saved game.Game
+	mu      sync.Mutex
+	saved   game.Game
+	updates int
 }
 
 func (r *repositoryStub) Save(_ context.Context, value game.Game, _ time.Duration) error {
@@ -35,6 +36,7 @@ func (r *repositoryStub) Update(_ context.Context, value game.Game, _ time.Durat
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.saved = value
+	r.updates++
 	return nil
 }
 
@@ -54,6 +56,12 @@ func (r *repositoryStub) GetByCode(_ context.Context, code string) (game.Game, e
 		return game.Game{}, game.ErrGameNotFound
 	}
 	return r.saved, nil
+}
+
+func (r *repositoryStub) updateCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.updates
 }
 
 func TestCreateGameUsesImmutableQuizSnapshot(t *testing.T) {
@@ -711,7 +719,7 @@ func TestHubRecoversPersistedTimedPhases(t *testing.T) {
 		},
 	}
 
-	t.Run("expired countdown opens question before reconnect state", func(t *testing.T) {
+	t.Run("restores countdown timer from absolute deadline", func(t *testing.T) {
 		repository := &repositoryStub{}
 		service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
 		created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
@@ -719,16 +727,18 @@ func TestHubRecoversPersistedTimedPhases(t *testing.T) {
 			t.Fatal(err)
 		}
 		recovered := created.Game
-		startedAt := time.Now().Add(-game.CountdownDuration - time.Second)
+		startedAt := time.Now().UTC().Add(-game.CountdownDuration + time.Second)
 		if _, err := recovered.AddPlayer("player-1", "Alice", "ticket-hash", startedAt); err != nil {
 			t.Fatal(err)
 		}
 		if err := recovered.Start(startedAt); err != nil {
 			t.Fatal(err)
 		}
+		countdownEndsAt := *recovered.CountdownEndsAt
 		if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
 			t.Fatal(err)
 		}
+		updatesBeforeRecovery := repository.updateCount()
 
 		hub := NewHub(repository, time.Hour)
 		defer hub.Close()
@@ -738,12 +748,26 @@ func TestHubRecoversPersistedTimedPhases(t *testing.T) {
 		}
 		event := waitForEvent(t, host.Events, "state", 2*time.Second)
 		state, ok := event.Payload.(StateView)
-		if !ok || state.Phase != game.PhaseQuestionOpen || state.CountdownEndsAt != nil || state.QuestionClosesAt == nil || state.CurrentQuestion == nil {
+		if !ok || state.Phase != game.PhaseCountdown || state.CountdownEndsAt == nil || !state.CountdownEndsAt.Equal(countdownEndsAt) {
 			t.Fatalf("unexpected recovered state: %#v", event.Payload)
+		}
+		waitForEvent(t, host.Events, "question_opened", 2*time.Second)
+
+		persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedClose := countdownEndsAt.Add(10 * time.Second)
+		if persisted.Phase != game.PhaseQuestionOpen || persisted.QuestionOpenedAt == nil || !persisted.QuestionOpenedAt.Equal(countdownEndsAt) || persisted.QuestionClosesAt == nil || !persisted.QuestionClosesAt.Equal(expectedClose) {
+			t.Fatalf("countdown did not resume from its deadline: %#v", persisted)
+		}
+		time.Sleep(100 * time.Millisecond)
+		if updates := repository.updateCount(); updates != updatesBeforeRecovery+1 {
+			t.Fatalf("countdown transition persisted %d times, want 1", updates-updatesBeforeRecovery)
 		}
 	})
 
-	t.Run("scoreboard includes results after reconnect", func(t *testing.T) {
+	t.Run("restores current question timer", func(t *testing.T) {
 		repository := &repositoryStub{}
 		service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
 		created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
@@ -751,19 +775,114 @@ func TestHubRecoversPersistedTimedPhases(t *testing.T) {
 			t.Fatal(err)
 		}
 		recovered := created.Game
-		startedAt := time.Now().Add(-time.Minute)
+		openedAt := time.Now().UTC().Add(-9500 * time.Millisecond)
+		startedAt := openedAt.Add(-game.CountdownDuration)
 		if _, err := recovered.AddPlayer("player-1", "Alice", "ticket-hash", startedAt); err != nil {
 			t.Fatal(err)
 		}
 		if err := recovered.Start(startedAt); err != nil {
 			t.Fatal(err)
 		}
-		if err := recovered.OpenCurrentQuestion(startedAt.Add(game.CountdownDuration)); err != nil {
+		if err := recovered.OpenCurrentQuestion(openedAt); err != nil {
 			t.Fatal(err)
 		}
-		if err := recovered.CloseQuestion(startedAt.Add(game.CountdownDuration + 10*time.Second)); err != nil {
+		questionClosesAt := *recovered.QuestionClosesAt
+		if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
 			t.Fatal(err)
 		}
+		updatesBeforeRecovery := repository.updateCount()
+
+		hub := NewHub(repository, time.Hour)
+		defer hub.Close()
+		host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		event := waitForEvent(t, host.Events, "state", 2*time.Second)
+		state, ok := event.Payload.(StateView)
+		if !ok || state.Phase != game.PhaseQuestionOpen || state.QuestionClosesAt == nil || !state.QuestionClosesAt.Equal(questionClosesAt) {
+			t.Fatalf("unexpected recovered question: %#v", event.Payload)
+		}
+		waitForEvent(t, host.Events, "question_closed", 2*time.Second)
+
+		persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persisted.Phase != game.PhaseScoreboard || !persisted.LastActivity.Equal(questionClosesAt) {
+			t.Fatalf("question did not close at its deadline: %#v", persisted)
+		}
+		time.Sleep(100 * time.Millisecond)
+		if updates := repository.updateCount(); updates != updatesBeforeRecovery+1 {
+			t.Fatalf("question transition persisted %d times, want 1", updates-updatesBeforeRecovery)
+		}
+	})
+
+	t.Run("catches up countdown and question before reconnect", func(t *testing.T) {
+		repository := &repositoryStub{}
+		service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+		created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recovered := created.Game
+		startedAt := time.Now().UTC().Add(-time.Minute)
+		if _, err := recovered.AddPlayer("player-1", "Alice", "ticket-hash", startedAt); err != nil {
+			t.Fatal(err)
+		}
+		if err := recovered.Start(startedAt); err != nil {
+			t.Fatal(err)
+		}
+		countdownEndsAt := *recovered.CountdownEndsAt
+		expectedQuestionClose := countdownEndsAt.Add(10 * time.Second)
+		expectedSequence := recovered.Sequence + 2
+		if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		updatesBeforeRecovery := repository.updateCount()
+
+		hub := NewHub(repository, time.Hour)
+		defer hub.Close()
+		host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		event := waitForEvent(t, host.Events, "state", 2*time.Second)
+		state, ok := event.Payload.(StateView)
+		if !ok || state.Phase != game.PhaseScoreboard || state.CountdownEndsAt != nil || state.QuestionClosesAt != nil || len(state.CorrectAnswerIDs) != 1 {
+			t.Fatalf("unexpected caught-up state: %#v", event.Payload)
+		}
+
+		persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persisted.Sequence != expectedSequence || persisted.QuestionOpenedAt == nil || !persisted.QuestionOpenedAt.Equal(countdownEndsAt) || !persisted.LastActivity.Equal(expectedQuestionClose) {
+			t.Fatalf("timed phases were not replayed deterministically: %#v", persisted)
+		}
+		if updates := repository.updateCount(); updates != updatesBeforeRecovery+2 {
+			t.Fatalf("catch-up persisted %d transitions, want 2", updates-updatesBeforeRecovery)
+		}
+	})
+
+	t.Run("long downtime finishes the last question", func(t *testing.T) {
+		lastQuestionSnapshot := snapshot
+		lastQuestionSnapshot.Questions = append([]game.Question(nil), snapshot.Questions[:1]...)
+		repository := &repositoryStub{}
+		service := New(catalogStub{snapshot: lastQuestionSnapshot}, repository, time.Hour)
+		created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recovered := created.Game
+		startedAt := time.Now().UTC().Add(-time.Minute)
+		if _, err := recovered.AddPlayer("player-1", "Alice", "ticket-hash", startedAt); err != nil {
+			t.Fatal(err)
+		}
+		if err := recovered.Start(startedAt); err != nil {
+			t.Fatal(err)
+		}
+		expectedFinishedAt := recovered.CountdownEndsAt.Add(10 * time.Second)
 		if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -776,8 +895,67 @@ func TestHubRecoversPersistedTimedPhases(t *testing.T) {
 		}
 		event := waitForEvent(t, host.Events, "state", 2*time.Second)
 		state, ok := event.Payload.(StateView)
-		if !ok || state.Phase != game.PhaseScoreboard || len(state.CorrectAnswerIDs) != 1 || state.CorrectAnswerIDs[0] != 1 || len(state.Players) != 1 {
-			t.Fatalf("unexpected recovered scoreboard: %#v", event.Payload)
+		if !ok || state.Phase != game.PhaseFinished || state.CountdownEndsAt != nil || state.QuestionClosesAt != nil {
+			t.Fatalf("unexpected recovered final state: %#v", event.Payload)
+		}
+		persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !persisted.LastActivity.Equal(expectedFinishedAt) {
+			t.Fatalf("finished at %s, want %s", persisted.LastActivity, expectedFinishedAt)
+		}
+	})
+
+	t.Run("lobby and scoreboard remain idle", func(t *testing.T) {
+		for _, phase := range []game.Phase{game.PhaseLobby, game.PhaseScoreboard} {
+			t.Run(string(phase), func(t *testing.T) {
+				repository := &repositoryStub{}
+				service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+				created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				recovered := created.Game
+				if phase == game.PhaseScoreboard {
+					startedAt := time.Now().UTC().Add(-time.Minute)
+					if _, err := recovered.AddPlayer("player-1", "Alice", "ticket-hash", startedAt); err != nil {
+						t.Fatal(err)
+					}
+					if err := recovered.Start(startedAt); err != nil {
+						t.Fatal(err)
+					}
+					openedAt := *recovered.CountdownEndsAt
+					if err := recovered.OpenCurrentQuestion(openedAt); err != nil {
+						t.Fatal(err)
+					}
+					if err := recovered.CloseQuestion(*recovered.QuestionClosesAt); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
+					t.Fatal(err)
+				}
+				updatesBeforeRecovery := repository.updateCount()
+
+				hub := NewHub(repository, time.Hour)
+				host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+				if err != nil {
+					hub.Close()
+					t.Fatal(err)
+				}
+				event := waitForEvent(t, host.Events, "state", 2*time.Second)
+				state, ok := event.Payload.(StateView)
+				if !ok || state.Phase != phase {
+					hub.Close()
+					t.Fatalf("unexpected restored phase: %#v", event.Payload)
+				}
+				time.Sleep(150 * time.Millisecond)
+				hub.Close()
+				if updates := repository.updateCount(); updates != updatesBeforeRecovery {
+					t.Fatalf("%s scheduled an unexpected transition", phase)
+				}
+			})
 		}
 	})
 }

@@ -258,6 +258,82 @@ func TestWebSocketReconnectClosesReplacedConnection(t *testing.T) {
 	waitForError(t, ctx, replacement, "still-current", "invalid_phase")
 }
 
+func TestWebSocketReconnectAfterRestartReceivesCaughtUpState(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{
+			{ID: 1, Text: "Q1", TimeLimitSeconds: 10, Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}}},
+			{ID: 2, Text: "Q2", TimeLimitSeconds: 10, Answers: []game.Answer{{ID: 3, Text: "A", IsCorrect: true}, {ID: 4, Text: "B"}}},
+		},
+	}
+	repository := &repositoryStub{}
+	service := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	initialHub := application.NewHub(repository, time.Hour)
+	joined, err := initialHub.Join(context.Background(), created.Game.Code, "Alice")
+	if err != nil {
+		initialHub.Close()
+		t.Fatal(err)
+	}
+	initialHub.Close()
+
+	recovered, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedAt := time.Now().UTC().Add(-time.Minute)
+	if err := recovered.Start(startedAt); err != nil {
+		t.Fatal(err)
+	}
+	countdownEndsAt := *recovered.CountdownEndsAt
+	expectedClosedAt := countdownEndsAt.Add(10 * time.Second)
+	if err := repository.Update(context.Background(), recovered, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	recoveredHub := application.NewHub(repository, time.Hour)
+	defer recoveredHub.Close()
+	server := httptest.NewServer(websockettransport.New(recoveredHub, log.New(io.Discard, "", 0)))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close(websocket.StatusNormalClosure, "test complete")
+	writeClientMessage(t, ctx, connection, "player_auth", "reconnect-after-restart", map[string]any{
+		"game_id": created.Game.ID, "participant_id": joined.Player.ID, "ticket": joined.Ticket,
+	})
+	waitForMessage(t, ctx, connection, "authenticated")
+	stateMessage := waitForMessage(t, ctx, connection, "state")
+	var state struct {
+		Phase            game.Phase `json:"phase"`
+		CountdownEndsAt  *time.Time `json:"countdown_ends_at"`
+		QuestionClosesAt *time.Time `json:"question_closes_at"`
+		CorrectAnswerIDs []int64    `json:"correct_answer_ids"`
+	}
+	if err := json.Unmarshal(stateMessage.Payload, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Phase != game.PhaseScoreboard || state.CountdownEndsAt != nil || state.QuestionClosesAt != nil || len(state.CorrectAnswerIDs) != 1 || state.CorrectAnswerIDs[0] != 1 {
+		t.Fatalf("unexpected recovered websocket state: %s", stateMessage.Payload)
+	}
+	persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.QuestionOpenedAt == nil || !persisted.QuestionOpenedAt.Equal(countdownEndsAt) || !persisted.LastActivity.Equal(expectedClosedAt) {
+		t.Fatalf("recovered websocket state used non-deterministic timestamps: %#v", persisted)
+	}
+}
+
 func TestWebSocketHeartbeatClosesUnresponsiveConnectionAndAllowsReconnect(t *testing.T) {
 	snapshot := game.QuizSnapshot{
 		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
