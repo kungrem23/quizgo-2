@@ -72,7 +72,7 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	snapshot := game.QuizSnapshot{
 		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
 		Questions: []game.Question{{
-			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			ID: 1, Text: "Q", TimeLimitSeconds: 1,
 			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
 		}},
 	}
@@ -88,7 +88,7 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	playerConnection, _, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
@@ -119,6 +119,10 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	})
 	waitForMessage(t, ctx, hostConnection, "authenticated")
 	writeClientMessage(t, ctx, hostConnection, "start", "start-1", nil)
+	countdown := waitForMessage(t, ctx, playerConnection, "countdown_started")
+	if !strings.Contains(string(countdown.Payload), `"phase":"countdown"`) || !strings.Contains(string(countdown.Payload), `"countdown_ends_at"`) || strings.Contains(string(countdown.Payload), `"current_question"`) {
+		t.Fatalf("unexpected countdown event: %#v", countdown)
+	}
 	opened := waitForMessage(t, ctx, playerConnection, "question_opened")
 	if opened.Sequence == 0 || strings.Contains(string(opened.Payload), "is_correct") {
 		t.Fatalf("unsafe question event: %#v", opened)
@@ -128,6 +132,22 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	accepted := waitForMessage(t, ctx, playerConnection, "answer_accepted")
 	if accepted.Sequence <= opened.Sequence {
 		t.Fatalf("sequence did not advance: opened=%d accepted=%d", opened.Sequence, accepted.Sequence)
+	}
+	closed := waitForMessage(t, ctx, playerConnection, "question_closed")
+	var closedPayload struct {
+		Phase            game.Phase `json:"phase"`
+		CorrectAnswerIDs []int64    `json:"correct_answer_ids"`
+	}
+	if err := json.Unmarshal(closed.Payload, &closedPayload); err != nil {
+		t.Fatal(err)
+	}
+	if closedPayload.Phase != game.PhaseScoreboard || len(closedPayload.CorrectAnswerIDs) != 1 || closedPayload.CorrectAnswerIDs[0] != 1 {
+		t.Fatalf("unexpected scoreboard payload: %s", closed.Payload)
+	}
+	writeClientMessage(t, ctx, hostConnection, "next", "next-1", nil)
+	finished := waitForMessage(t, ctx, playerConnection, "game_finished")
+	if !strings.Contains(string(finished.Payload), `"phase":"finished"`) {
+		t.Fatalf("unexpected finished event: %#v", finished)
 	}
 }
 

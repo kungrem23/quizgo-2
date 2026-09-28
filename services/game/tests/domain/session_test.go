@@ -59,22 +59,76 @@ func TestGameLifecycleScoresOnlyFirstAnswer(t *testing.T) {
 	if err := session.Start(now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	submission, err := session.SubmitAnswer("player-1", 4, now.Add(2*time.Second))
+	if session.Phase != PhaseCountdown || session.CountdownEndsAt == nil || !session.CountdownEndsAt.Equal(now.Add(time.Second+CountdownDuration)) {
+		t.Fatalf("unexpected countdown state: %#v", session)
+	}
+	if _, err := session.SubmitAnswer("player-1", 4, now.Add(2*time.Second)); !errors.Is(err, ErrInvalidPhase) {
+		t.Fatalf("answer during countdown error = %v", err)
+	}
+	if err := session.OpenCurrentQuestion(now.Add(2 * time.Second)); !errors.Is(err, ErrCountdownActive) {
+		t.Fatalf("early countdown completion error = %v", err)
+	}
+	openedAt := *session.CountdownEndsAt
+	if err := session.OpenCurrentQuestion(openedAt); err != nil {
+		t.Fatal(err)
+	}
+	if session.Phase != PhaseQuestionOpen || session.CountdownEndsAt != nil {
+		t.Fatalf("unexpected open question state: %#v", session)
+	}
+	submission, err := session.SubmitAnswer("player-1", 4, openedAt.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !submission.IsCorrect || submission.ScoreAwarded < 500 || session.Players[0].Score != submission.ScoreAwarded {
 		t.Fatalf("unexpected submission: %#v player=%#v", submission, session.Players[0])
 	}
-	if _, err := session.SubmitAnswer("player-1", 5, now.Add(3*time.Second)); !errors.Is(err, ErrAlreadyAnswered) {
+	if _, err := session.SubmitAnswer("player-1", 5, openedAt.Add(2*time.Second)); !errors.Is(err, ErrAlreadyAnswered) {
 		t.Fatalf("second answer error = %v", err)
 	}
-	if err := session.CloseQuestion(now.Add(21 * time.Second)); err != nil {
+	if err := session.CloseQuestion(openedAt.Add(20 * time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	finished, err := session.Next(now.Add(22 * time.Second))
+	if session.Phase != PhaseScoreboard {
+		t.Fatalf("phase after close = %s", session.Phase)
+	}
+	finished, err := session.Next(openedAt.Add(21 * time.Second))
 	if err != nil || !finished || session.Phase != PhaseFinished {
 		t.Fatalf("finished=%v phase=%s err=%v", finished, session.Phase, err)
+	}
+}
+
+func TestNextStartsCountdownForFollowingQuestion(t *testing.T) {
+	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
+	snapshot := validSnapshot()
+	second := snapshot.Questions[0]
+	second.ID = 6
+	second.Text = "What is a channel?"
+	second.Answers = []Answer{{ID: 7, Text: "A communication primitive", IsCorrect: true}, {ID: 8, Text: "A database"}}
+	snapshot.Questions = append(snapshot.Questions, second)
+	session, err := NewGame("game-1", "ABC123", 7, snapshot, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.AddPlayer("player-1", "Alice", "ticket-hash", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Start(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.OpenCurrentQuestion(now.Add(CountdownDuration)); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.CloseQuestion(now.Add(CountdownDuration + 20*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	nextAt := now.Add(CountdownDuration + 21*time.Second)
+	finished, err := session.Next(nextAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished || session.Phase != PhaseCountdown || session.CurrentQuestionIndex != 1 || session.CountdownEndsAt == nil || !session.CountdownEndsAt.Equal(nextAt.Add(CountdownDuration)) {
+		t.Fatalf("unexpected next-question state: %#v", session)
 	}
 }
 

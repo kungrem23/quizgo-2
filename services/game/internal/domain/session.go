@@ -181,8 +181,8 @@ func (g *Game) CloseQuestion(now time.Time) error {
 	return nil
 }
 
-// Next opens the next question or finishes the game. It returns true when the
-// game has reached its terminal state.
+// Next starts the next question's countdown or finishes the game. It returns
+// true when the game has reached its terminal state.
 func (g *Game) Next(now time.Time) (bool, error) {
 	if g == nil || (g.Phase != PhaseScoreboard && g.Phase != PhaseQuestionClosed) {
 		return false, ErrInvalidPhase

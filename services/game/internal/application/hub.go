@@ -69,7 +69,9 @@ type StateView struct {
 	Players              []PlayerView  `json:"players"`
 	CurrentQuestionIndex int           `json:"current_question_index"`
 	CurrentQuestion      *QuestionView `json:"current_question,omitempty"`
+	CountdownEndsAt      *time.Time    `json:"countdown_ends_at,omitempty"`
 	QuestionClosesAt     *time.Time    `json:"question_closes_at,omitempty"`
+	CorrectAnswerIDs     []int64       `json:"correct_answer_ids,omitempty"`
 }
 
 type Hub struct {
@@ -226,13 +228,13 @@ func (h *Hub) roomFor(value game.Game) (*room, error) {
 }
 
 type room struct {
-	game         game.Game
-	repository   GameRepository
-	ttl          time.Duration
-	requests     chan roomRequest
-	done         chan struct{}
-	subscribers  map[string]*Session
-	closeRetryAt time.Time
+	game              game.Game
+	repository        GameRepository
+	ttl               time.Duration
+	requests          chan roomRequest
+	done              chan struct{}
+	subscribers       map[string]*Session
+	transitionRetryAt time.Time
 }
 
 type roomRequest struct {
@@ -285,15 +287,21 @@ func (r *room) run() {
 	}()
 	for {
 		var timerC <-chan time.Time
-		if r.game.Phase == game.PhaseQuestionOpen && r.game.QuestionClosesAt != nil {
-			target := *r.game.QuestionClosesAt
-			if r.closeRetryAt.After(target) {
-				target = r.closeRetryAt
+		if deadline := r.transitionDeadline(); deadline != nil {
+			target := *deadline
+			if r.transitionRetryAt.After(target) {
+				target = r.transitionRetryAt
+			}
+			now := time.Now()
+			if !target.After(now) {
+				if err := r.advanceTimedPhase(now); err != nil {
+					r.transitionRetryAt = now.Add(500 * time.Millisecond)
+				} else {
+					r.transitionRetryAt = time.Time{}
+				}
+				continue
 			}
 			delay := time.Until(target)
-			if delay < 0 {
-				delay = 0
-			}
 			if timer == nil {
 				timer = time.NewTimer(delay)
 			} else {
@@ -323,12 +331,22 @@ func (r *room) run() {
 				}
 				return
 			}
+			if request.kind == "authenticate" {
+				now := time.Now()
+				if deadline := r.transitionDeadline(); deadline != nil && !deadline.After(now) && !r.transitionRetryAt.After(now) {
+					if err := r.advanceTimedPhase(now); err != nil {
+						r.transitionRetryAt = now.Add(500 * time.Millisecond)
+					} else {
+						r.transitionRetryAt = time.Time{}
+					}
+				}
+			}
 			r.handle(request)
-		case closedAt := <-timerC:
-			if err := r.closeExpiredQuestion(closedAt); err != nil {
-				r.closeRetryAt = time.Now().Add(500 * time.Millisecond)
+		case transitionedAt := <-timerC:
+			if err := r.advanceTimedPhase(transitionedAt); err != nil {
+				r.transitionRetryAt = time.Now().Add(500 * time.Millisecond)
 			} else {
-				r.closeRetryAt = time.Time{}
+				r.transitionRetryAt = time.Time{}
 			}
 		}
 	}
@@ -405,7 +423,7 @@ func (r *room) start(request roomRequest) {
 	}
 	if err == nil {
 		r.game = candidate
-		r.broadcast(OutboundEvent{Type: "question_opened", Sequence: r.game.Sequence, Payload: stateView(r.game)})
+		r.broadcast(OutboundEvent{Type: "countdown_started", Sequence: r.game.Sequence, Payload: stateView(r.game)})
 	}
 	r.respond(request, roomResponse{err: err})
 }
@@ -440,13 +458,48 @@ func (r *room) next(request roomRequest) {
 	}
 	if err == nil {
 		r.game = candidate
-		eventType := "question_opened"
+		eventType := "countdown_started"
 		if finished {
 			eventType = "game_finished"
 		}
 		r.broadcast(OutboundEvent{Type: eventType, Sequence: r.game.Sequence, Payload: stateView(r.game)})
 	}
 	r.respond(request, roomResponse{err: err})
+}
+
+func (r *room) transitionDeadline() *time.Time {
+	switch r.game.Phase {
+	case game.PhaseCountdown:
+		return r.game.CountdownEndsAt
+	case game.PhaseQuestionOpen:
+		return r.game.QuestionClosesAt
+	default:
+		return nil
+	}
+}
+
+func (r *room) advanceTimedPhase(now time.Time) error {
+	switch r.game.Phase {
+	case game.PhaseCountdown:
+		return r.openExpiredCountdown(now)
+	case game.PhaseQuestionOpen:
+		return r.closeExpiredQuestion(now)
+	default:
+		return nil
+	}
+}
+
+func (r *room) openExpiredCountdown(now time.Time) error {
+	candidate := cloneGame(r.game)
+	if err := candidate.OpenCurrentQuestion(now); err != nil {
+		return err
+	}
+	if err := r.persist(candidate); err != nil {
+		return err
+	}
+	r.game = candidate
+	r.broadcast(OutboundEvent{Type: "question_opened", Sequence: r.game.Sequence, Payload: stateView(r.game)})
+	return nil
 }
 
 func (r *room) closeExpiredQuestion(now time.Time) error {
@@ -459,14 +512,8 @@ func (r *room) closeExpiredQuestion(now time.Time) error {
 	}
 	r.game = candidate
 	question, _ := r.game.CurrentQuestion()
-	correct := make([]int64, 0, 1)
-	for _, answer := range question.Answers {
-		if answer.IsCorrect {
-			correct = append(correct, answer.ID)
-		}
-	}
 	r.broadcast(OutboundEvent{Type: "question_closed", Sequence: r.game.Sequence, Payload: map[string]any{
-		"question_id": question.ID, "correct_answer_ids": correct, "players": leaderboard(r.game.Players),
+		"phase": r.game.Phase, "question_id": question.ID, "correct_answer_ids": correctAnswerIDs(question), "players": leaderboard(r.game.Players),
 	}})
 	return nil
 }
@@ -534,6 +581,10 @@ func cloneGame(value game.Game) game.Game {
 		openedAt := *value.QuestionOpenedAt
 		clone.QuestionOpenedAt = &openedAt
 	}
+	if value.CountdownEndsAt != nil {
+		countdownEndsAt := *value.CountdownEndsAt
+		clone.CountdownEndsAt = &countdownEndsAt
+	}
 	if value.QuestionClosesAt != nil {
 		closesAt := *value.QuestionClosesAt
 		clone.QuestionClosesAt = &closesAt
@@ -545,9 +596,9 @@ func stateView(value game.Game) StateView {
 	view := StateView{
 		GameID: value.ID, Code: value.Code, QuizTitle: value.Quiz.Title, Phase: value.Phase,
 		Players: leaderboard(value.Players), CurrentQuestionIndex: value.CurrentQuestionIndex,
-		QuestionClosesAt: value.QuestionClosesAt,
+		CountdownEndsAt: value.CountdownEndsAt, QuestionClosesAt: value.QuestionClosesAt,
 	}
-	if question, ok := value.CurrentQuestion(); ok && value.Phase != game.PhaseFinished {
+	if question, ok := value.CurrentQuestion(); ok && (value.Phase == game.PhaseQuestionOpen || value.Phase == game.PhaseScoreboard || value.Phase == game.PhaseQuestionClosed) {
 		answers := make([]AnswerView, len(question.Answers))
 		for index, answer := range question.Answers {
 			answers[index] = AnswerView{ID: answer.ID, Text: answer.Text}
@@ -556,8 +607,21 @@ func stateView(value game.Game) StateView {
 			ID: question.ID, Text: question.Text, ImageID: question.ImageID,
 			TimeLimitSeconds: question.TimeLimitSeconds, Answers: answers,
 		}
+		if value.Phase == game.PhaseScoreboard || value.Phase == game.PhaseQuestionClosed {
+			view.CorrectAnswerIDs = correctAnswerIDs(question)
+		}
 	}
 	return view
+}
+
+func correctAnswerIDs(question game.Question) []int64 {
+	result := make([]int64, 0, 1)
+	for _, answer := range question.Answers {
+		if answer.IsCorrect {
+			result = append(result, answer.ID)
+		}
+	}
+	return result
 }
 
 func leaderboard(players []game.Player) []PlayerView {
