@@ -76,20 +76,31 @@ service token. Quiz проверяет пользователя, владени�
 {"type":"start","request_id":"1"}
 {"type":"answer","request_id":"2","payload":{"answer_id":17}}
 {"type":"next","request_id":"3"}
+{"type":"finish","request_id":"4"}
+{"type":"remove_player","request_id":"5","payload":{"player_id":"..."}}
+{"type":"leave","request_id":"6"}
 ```
 
 - `start` — ведущий запускает трёхсекундный countdown перед первым вопросом; без игроков старт запрещён;
 - `answer` — игрок отвечает один раз до дедлайна вопроса;
-- `next` — из scoreboard запускает countdown следующего вопроса или завершает игру.
+- `next` — ведущий из scoreboard запускает countdown следующего вопроса;
+- `finish` — ведущий завершает незавершённую игру, в том числе закрывает lobby;
+- `remove_player` — ведущий удаляет игрока из lobby;
+- `leave` — игрок удаляет из lobby только самого себя и закрывает своё соединение.
 
 Основные события: `player_joined`, `countdown_started`, `question_opened`,
-`answer_accepted`, `player_answered`, `question_closed`, `game_finished`.
+`answer_accepted`, `player_answered`, `question_closed`, `player_left`,
+`player_removed`, `game_finished`.
 `countdown_started` содержит `countdown_ends_at`, но ещё не раскрывает вопрос.
-После истечения времени вопроса фаза становится `scoreboard`, а совместимое событие
-`question_closed` показывает `correct_answer_ids` и таблицу результатов. Полное
-событие `state` при переподключении содержит дедлайн текущей фазы, а в scoreboard —
-правильные ответы. Countdown и вопрос завершаются серверными таймерами, поэтому
-клиентский таймер не является источником истины.
+После истечения времени не последнего вопроса фаза становится `scoreboard`, а
+совместимое событие `question_closed` показывает `correct_answer_ids` и таблицу
+результатов. Полное событие `state` при переподключении содержит дедлайн текущей
+фазы, а в scoreboard — правильные ответы. Countdown и вопрос завершаются серверными
+таймерами, поэтому клиентский таймер не является источником истины. После последнего
+вопроса сервер автоматически сохраняет фазу `finished` и вслед за итоговым
+`question_closed` рассылает `game_finished`; команда `next` для этого не нужна.
+Ticket удалённого или вышедшего игрока сразу перестаёт проходить повторную
+аутентификацию.
 
 ## Ограничение текущего этапа
 

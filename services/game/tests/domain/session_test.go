@@ -88,12 +88,11 @@ func TestGameLifecycleScoresOnlyFirstAnswer(t *testing.T) {
 	if err := session.CloseQuestion(openedAt.Add(20 * time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if session.Phase != PhaseScoreboard {
+	if session.Phase != PhaseFinished || session.QuestionOpenedAt != nil || session.QuestionClosesAt != nil {
 		t.Fatalf("phase after close = %s", session.Phase)
 	}
-	finished, err := session.Next(openedAt.Add(21 * time.Second))
-	if err != nil || !finished || session.Phase != PhaseFinished {
-		t.Fatalf("finished=%v phase=%s err=%v", finished, session.Phase, err)
+	if _, err := session.Next(openedAt.Add(21 * time.Second)); !errors.Is(err, ErrInvalidPhase) {
+		t.Fatalf("next after automatic finish error = %v", err)
 	}
 }
 
@@ -143,4 +142,60 @@ func TestGameRejectsDuplicateNicknameCaseInsensitively(t *testing.T) {
 	if _, err := session.AddPlayer("player-2", " alice ", "hash-2", time.Now()); !errors.Is(err, ErrNicknameTaken) {
 		t.Fatalf("error = %v", err)
 	}
+}
+
+func TestLobbyPlayerRemovalAndFinishTransitions(t *testing.T) {
+	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
+
+	t.Run("removes only an existing lobby player", func(t *testing.T) {
+		session, err := NewGame("game-1", "ABC123", 7, validSnapshot(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := session.AddPlayer("player-1", "Alice", "hash-1", now); err != nil {
+			t.Fatal(err)
+		}
+		removed, err := session.RemovePlayer("player-1", now.Add(time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if removed.ID != "player-1" || len(session.Players) != 0 || session.Sequence != 3 {
+			t.Fatalf("unexpected removal: removed=%#v game=%#v", removed, session)
+		}
+		if _, err := session.RemovePlayer("player-1", now.Add(2*time.Second)); !errors.Is(err, ErrInvalidPlayer) {
+			t.Fatalf("second removal error = %v", err)
+		}
+	})
+
+	t.Run("rejects lobby commands after start", func(t *testing.T) {
+		session, err := NewGame("game-1", "ABC123", 7, validSnapshot(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := session.AddPlayer("player-1", "Alice", "hash-1", now); err != nil {
+			t.Fatal(err)
+		}
+		if err := session.Start(now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := session.RemovePlayer("player-1", now); !errors.Is(err, ErrInvalidPhase) {
+			t.Fatalf("remove during countdown error = %v", err)
+		}
+	})
+
+	t.Run("host may finish any active phase only once", func(t *testing.T) {
+		session, err := NewGame("game-1", "ABC123", 7, validSnapshot(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := session.Finish(now.Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if session.Phase != PhaseFinished || session.CountdownEndsAt != nil || session.QuestionOpenedAt != nil || session.QuestionClosesAt != nil {
+			t.Fatalf("unexpected finished game: %#v", session)
+		}
+		if err := session.Finish(now.Add(2 * time.Second)); !errors.Is(err, ErrInvalidPhase) {
+			t.Fatalf("second finish error = %v", err)
+		}
+	})
 }

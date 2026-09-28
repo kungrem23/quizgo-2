@@ -68,6 +68,9 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		if err := writeMessage(ctx, connection, ServerMessage{Type: "command_accepted", RequestID: message.RequestID}); err != nil {
 			return
 		}
+		if message.Type == "leave" {
+			return
+		}
 	}
 }
 
@@ -132,8 +135,16 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 
 func (h *Handler) dispatch(ctx context.Context, session *application.Session, message ClientMessage) error {
 	switch message.Type {
-	case "start", "next":
+	case "start", "next", "finish", "leave":
 		return h.hub.Dispatch(ctx, session, message.Type, 0)
+	case "remove_player":
+		var payload struct {
+			PlayerID string `json:"player_id"`
+		}
+		if err := decodePayload(message.Payload, &payload); err != nil || payload.PlayerID == "" {
+			return game.ErrInvalidPlayer
+		}
+		return h.hub.DispatchPlayer(ctx, session, "remove_player", payload.PlayerID)
 	case "answer":
 		var payload struct {
 			AnswerID int64 `json:"answer_id"`

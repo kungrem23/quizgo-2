@@ -103,6 +103,21 @@ func (g *Game) AddPlayer(id, nickname, ticketHash string, now time.Time) (Player
 	return player, nil
 }
 
+func (g *Game) RemovePlayer(playerID string, now time.Time) (Player, error) {
+	if g == nil || g.Phase != PhaseLobby {
+		return Player{}, ErrInvalidPhase
+	}
+	for index, player := range g.Players {
+		if player.ID != playerID {
+			continue
+		}
+		g.Players = append(g.Players[:index], g.Players[index+1:]...)
+		g.touch(now)
+		return player, nil
+	}
+	return Player{}, ErrInvalidPlayer
+}
+
 func (g *Game) Start(now time.Time) error {
 	if g == nil || g.Phase != PhaseLobby || len(g.Players) == 0 {
 		return ErrInvalidPhase
@@ -175,7 +190,29 @@ func (g *Game) CloseQuestion(now time.Time) error {
 	if g == nil || g.Phase != PhaseQuestionOpen {
 		return ErrInvalidPhase
 	}
-	g.Phase = PhaseScoreboard
+	if g.CurrentQuestionIndex+1 >= len(g.Quiz.Questions) {
+		g.Phase = PhaseFinished
+		g.QuestionOpenedAt = nil
+	} else {
+		g.Phase = PhaseScoreboard
+	}
+	g.QuestionClosesAt = nil
+	g.touch(now)
+	return nil
+}
+
+func (g *Game) Finish(now time.Time) error {
+	if g == nil {
+		return ErrInvalidPhase
+	}
+	switch g.Phase {
+	case PhaseLobby, PhaseCountdown, PhaseQuestionOpen, PhaseQuestionClosed, PhaseScoreboard:
+	default:
+		return ErrInvalidPhase
+	}
+	g.Phase = PhaseFinished
+	g.CountdownEndsAt = nil
+	g.QuestionOpenedAt = nil
 	g.QuestionClosesAt = nil
 	g.touch(now)
 	return nil

@@ -161,11 +161,19 @@ func (h *Hub) authenticate(ctx context.Context, gameID, participantID string, ro
 }
 
 func (h *Hub) Dispatch(ctx context.Context, session *Session, command string, answerID int64) error {
+	return h.dispatch(ctx, session, roomRequest{kind: command, session: session, answerID: answerID, now: h.now()})
+}
+
+func (h *Hub) DispatchPlayer(ctx context.Context, session *Session, command, playerID string) error {
+	return h.dispatch(ctx, session, roomRequest{kind: command, session: session, targetPlayerID: playerID, now: h.now()})
+}
+
+func (h *Hub) dispatch(ctx context.Context, session *Session, request roomRequest) error {
 	if session == nil || session.room == nil {
 		return game.ErrUnauthorized
 	}
 	response := make(chan roomResponse, 1)
-	request := roomRequest{kind: command, session: session, answerID: answerID, now: h.now(), response: response}
+	request.response = response
 	if err := sendRoomRequest(ctx, session.room, request); err != nil {
 		return err
 	}
@@ -238,15 +246,16 @@ type room struct {
 }
 
 type roomRequest struct {
-	kind          string
-	session       *Session
-	participantID string
-	nickname      string
-	role          Role
-	ticketHash    string
-	answerID      int64
-	now           time.Time
-	response      chan roomResponse
+	kind           string
+	session        *Session
+	participantID  string
+	nickname       string
+	role           Role
+	ticketHash     string
+	answerID       int64
+	targetPlayerID string
+	now            time.Time
+	response       chan roomResponse
 }
 
 type roomResponse struct {
@@ -368,6 +377,12 @@ func (r *room) handle(request roomRequest) {
 		r.answer(request)
 	case "next":
 		r.next(request)
+	case "finish":
+		r.finish(request)
+	case "remove_player":
+		r.removePlayer(request)
+	case "leave":
+		r.leave(request)
 	default:
 		r.respond(request, roomResponse{err: errors.New("unknown game command")})
 	}
@@ -429,7 +444,7 @@ func (r *room) start(request roomRequest) {
 }
 
 func (r *room) answer(request roomRequest) {
-	if request.session == nil || request.session.Role != RolePlayer || r.subscribers[request.session.ID] != request.session {
+	if !r.isPlayer(request.session) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
@@ -463,6 +478,61 @@ func (r *room) next(request roomRequest) {
 			eventType = "game_finished"
 		}
 		r.broadcast(OutboundEvent{Type: eventType, Sequence: r.game.Sequence, Payload: stateView(r.game)})
+	}
+	r.respond(request, roomResponse{err: err})
+}
+
+func (r *room) finish(request roomRequest) {
+	if !r.isHost(request.session) {
+		r.respond(request, roomResponse{err: game.ErrUnauthorized})
+		return
+	}
+	candidate := cloneGame(r.game)
+	err := candidate.Finish(request.now)
+	if err == nil {
+		err = r.persist(candidate)
+	}
+	if err == nil {
+		r.game = candidate
+		r.broadcast(OutboundEvent{Type: "game_finished", Sequence: r.game.Sequence, Payload: stateView(r.game)})
+	}
+	r.respond(request, roomResponse{err: err})
+}
+
+func (r *room) removePlayer(request roomRequest) {
+	if !r.isHost(request.session) {
+		r.respond(request, roomResponse{err: game.ErrUnauthorized})
+		return
+	}
+	candidate := cloneGame(r.game)
+	removed, err := candidate.RemovePlayer(request.targetPlayerID, request.now)
+	if err == nil {
+		err = r.persist(candidate)
+	}
+	if err == nil {
+		r.game = candidate
+		r.broadcast(OutboundEvent{Type: "player_removed", Sequence: r.game.Sequence, Payload: playerView(removed)})
+		r.removePlayerSubscribers(removed.ID, "")
+	}
+	r.respond(request, roomResponse{err: err})
+}
+
+func (r *room) leave(request roomRequest) {
+	if !r.isPlayer(request.session) {
+		r.respond(request, roomResponse{err: game.ErrUnauthorized})
+		return
+	}
+	candidate := cloneGame(r.game)
+	removed, err := candidate.RemovePlayer(request.session.ParticipantID, request.now)
+	if err == nil {
+		err = r.persist(candidate)
+	}
+	if err == nil {
+		r.game = candidate
+		r.broadcast(OutboundEvent{Type: "player_left", Sequence: r.game.Sequence, Payload: playerView(removed)})
+		// The WebSocket handler closes the command's own connection after it
+		// acknowledges leave. Any other connection for this player is stale now.
+		r.removePlayerSubscribers(removed.ID, request.session.ID)
 	}
 	r.respond(request, roomResponse{err: err})
 }
@@ -515,6 +585,9 @@ func (r *room) closeExpiredQuestion(now time.Time) error {
 	r.broadcast(OutboundEvent{Type: "question_closed", Sequence: r.game.Sequence, Payload: map[string]any{
 		"phase": r.game.Phase, "question_id": question.ID, "correct_answer_ids": correctAnswerIDs(question), "players": leaderboard(r.game.Players),
 	}})
+	if r.game.Phase == game.PhaseFinished {
+		r.broadcast(OutboundEvent{Type: "game_finished", Sequence: r.game.Sequence, Payload: stateView(r.game)})
+	}
 	return nil
 }
 
@@ -541,6 +614,14 @@ func (r *room) removeSubscriber(id string) {
 	}
 }
 
+func (r *room) removePlayerSubscribers(playerID, exceptSessionID string) {
+	for id, session := range r.subscribers {
+		if id != exceptSessionID && session.Role == RolePlayer && session.ParticipantID == playerID {
+			r.removeSubscriber(id)
+		}
+	}
+}
+
 func (r *room) broadcast(event OutboundEvent) {
 	for _, session := range r.subscribers {
 		r.send(session, event)
@@ -563,6 +644,18 @@ func (r *room) respond(request roomRequest, response roomResponse) {
 
 func (r *room) isHost(session *Session) bool {
 	return session != nil && session.Role == RoleHost && r.subscribers[session.ID] == session
+}
+
+func (r *room) isPlayer(session *Session) bool {
+	if session == nil || session.Role != RolePlayer || r.subscribers[session.ID] != session {
+		return false
+	}
+	for _, player := range r.game.Players {
+		if player.ID == session.ParticipantID {
+			return true
+		}
+	}
+	return false
 }
 
 func equalHash(left, right string) bool {

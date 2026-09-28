@@ -68,6 +68,12 @@ type serverMessage struct {
 	Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
+type joinedPayload struct {
+	GameID   string `json:"game_id"`
+	PlayerID string `json:"player_id"`
+	Ticket   string `json:"ticket"`
+}
+
 func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	snapshot := game.QuizSnapshot{
 		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
@@ -97,15 +103,11 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	defer playerConnection.Close(websocket.StatusNormalClosure, "test complete")
 	writeClientMessage(t, ctx, playerConnection, "join", "join-1", map[string]any{"code": created.Game.Code, "nickname": "Alice"})
 	joined := waitForMessage(t, ctx, playerConnection, "joined")
-	var joinedPayload struct {
-		GameID   string `json:"game_id"`
-		PlayerID string `json:"player_id"`
-		Ticket   string `json:"ticket"`
-	}
-	if err := json.Unmarshal(joined.Payload, &joinedPayload); err != nil {
+	var joinedData joinedPayload
+	if err := json.Unmarshal(joined.Payload, &joinedData); err != nil {
 		t.Fatal(err)
 	}
-	if joinedPayload.GameID != created.Game.ID || joinedPayload.PlayerID == "" || joinedPayload.Ticket == "" {
+	if joinedData.GameID != created.Game.ID || joinedData.PlayerID == "" || joinedData.Ticket == "" {
 		t.Fatalf("unexpected joined payload: %s", joined.Payload)
 	}
 
@@ -141,14 +143,73 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	if err := json.Unmarshal(closed.Payload, &closedPayload); err != nil {
 		t.Fatal(err)
 	}
-	if closedPayload.Phase != game.PhaseScoreboard || len(closedPayload.CorrectAnswerIDs) != 1 || closedPayload.CorrectAnswerIDs[0] != 1 {
+	if closedPayload.Phase != game.PhaseFinished || len(closedPayload.CorrectAnswerIDs) != 1 || closedPayload.CorrectAnswerIDs[0] != 1 {
 		t.Fatalf("unexpected scoreboard payload: %s", closed.Payload)
 	}
-	writeClientMessage(t, ctx, hostConnection, "next", "next-1", nil)
 	finished := waitForMessage(t, ctx, playerConnection, "game_finished")
 	if !strings.Contains(string(finished.Payload), `"phase":"finished"`) {
 		t.Fatalf("unexpected finished event: %#v", finished)
 	}
+}
+
+func TestWebSocketLobbyLifecycleAndAuthorization(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := application.NewHub(repository, time.Hour)
+	defer hub.Close()
+	server := httptest.NewServer(websockettransport.New(hub, log.New(io.Discard, "", 0)))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	aliceConnection, alice := joinPlayer(t, ctx, wsURL, created.Game.Code, "Alice")
+	defer aliceConnection.Close(websocket.StatusNormalClosure, "test complete")
+	bobConnection, bob := joinPlayer(t, ctx, wsURL, created.Game.Code, "Bob")
+	defer bobConnection.Close(websocket.StatusNormalClosure, "test complete")
+	hostConnection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hostConnection.Close(websocket.StatusNormalClosure, "test complete")
+	writeClientMessage(t, ctx, hostConnection, "host_auth", "host-auth", map[string]any{"game_id": created.Game.ID, "ticket": created.HostTicket})
+	waitForMessage(t, ctx, hostConnection, "authenticated")
+
+	writeClientMessage(t, ctx, aliceConnection, "remove_player", "forbidden-remove", map[string]any{"player_id": bob.PlayerID})
+	waitForError(t, ctx, aliceConnection, "forbidden-remove", "unauthorized")
+	writeClientMessage(t, ctx, aliceConnection, "finish", "forbidden-finish", nil)
+	waitForError(t, ctx, aliceConnection, "forbidden-finish", "unauthorized")
+
+	writeClientMessage(t, ctx, bobConnection, "leave", "leave-bob", nil)
+	waitForMessage(t, ctx, bobConnection, "command_accepted")
+	left := waitForMessage(t, ctx, hostConnection, "player_left")
+	if !strings.Contains(string(left.Payload), bob.PlayerID) {
+		t.Fatalf("unexpected player_left event: %s", left.Payload)
+	}
+	assertPlayerAuthRejected(t, ctx, wsURL, created.Game.ID, bob)
+
+	writeClientMessage(t, ctx, hostConnection, "remove_player", "remove-alice", map[string]any{"player_id": alice.PlayerID})
+	removed := waitForMessage(t, ctx, aliceConnection, "player_removed")
+	if !strings.Contains(string(removed.Payload), alice.PlayerID) {
+		t.Fatalf("unexpected player_removed event: %s", removed.Payload)
+	}
+	assertPlayerAuthRejected(t, ctx, wsURL, created.Game.ID, alice)
+
+	writeClientMessage(t, ctx, hostConnection, "finish", "finish-lobby", nil)
+	waitForMessage(t, ctx, hostConnection, "game_finished")
+	writeClientMessage(t, ctx, hostConnection, "remove_player", "remove-after-finish", map[string]any{"player_id": alice.PlayerID})
+	waitForError(t, ctx, hostConnection, "remove-after-finish", "invalid_phase")
 }
 
 func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket.Conn, messageType, requestID string, payload any) {
@@ -163,6 +224,67 @@ func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket
 	}
 	if err := wsjson.Write(ctx, connection, websockettransport.ClientMessage{Type: messageType, RequestID: requestID, Payload: raw}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func joinPlayer(t *testing.T, ctx context.Context, wsURL, code, nickname string) (*websocket.Conn, joinedPayload) {
+	t.Helper()
+	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeClientMessage(t, ctx, connection, "join", "join-"+nickname, map[string]any{"code": code, "nickname": nickname})
+	message := waitForMessage(t, ctx, connection, "joined")
+	var joined joinedPayload
+	if err := json.Unmarshal(message.Payload, &joined); err != nil {
+		connection.Close(websocket.StatusInternalError, "invalid joined payload")
+		t.Fatal(err)
+	}
+	return connection, joined
+}
+
+func assertPlayerAuthRejected(t *testing.T, ctx context.Context, wsURL, gameID string, player joinedPayload) {
+	t.Helper()
+	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close(websocket.StatusNormalClosure, "test complete")
+	writeClientMessage(t, ctx, connection, "player_auth", "reconnect", map[string]any{
+		"game_id": gameID, "participant_id": player.PlayerID, "ticket": player.Ticket,
+	})
+	var message serverMessage
+	if err := wsjson.Read(ctx, connection, &message); err != nil {
+		if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+			t.Fatalf("rejected reconnect closed with %v", err)
+		}
+		return
+	}
+	if message.Type != "error" || !strings.Contains(string(message.Payload), `"code":"unauthorized"`) {
+		t.Fatalf("unexpected rejected reconnect response: %#v", message)
+	}
+}
+
+func waitForError(t *testing.T, ctx context.Context, connection *websocket.Conn, requestID, code string) serverMessage {
+	t.Helper()
+	for {
+		var message serverMessage
+		if err := wsjson.Read(ctx, connection, &message); err != nil {
+			t.Fatalf("waiting for error %q: %v", code, err)
+		}
+		if message.Type != "error" || message.RequestID != requestID {
+			continue
+		}
+		var payload struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Code != code {
+			t.Fatalf("error code = %q, want %q", payload.Code, code)
+		}
+		return message
 	}
 }
 
