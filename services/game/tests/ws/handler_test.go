@@ -121,6 +121,9 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	})
 	waitForMessage(t, ctx, hostConnection, "authenticated")
 	writeClientMessage(t, ctx, hostConnection, "start", "start-1", nil)
+	assertCommandAck(t, waitForMessage(t, ctx, hostConnection, "command_accepted"), "start-1", false)
+	writeClientMessage(t, ctx, hostConnection, "start", "start-1", nil)
+	assertCommandAck(t, waitForMessage(t, ctx, hostConnection, "command_accepted"), "start-1", true)
 	countdown := waitForMessage(t, ctx, playerConnection, "countdown_started")
 	if !strings.Contains(string(countdown.Payload), `"phase":"countdown"`) || !strings.Contains(string(countdown.Payload), `"countdown_ends_at"`) || strings.Contains(string(countdown.Payload), `"current_question"`) {
 		t.Fatalf("unexpected countdown event: %#v", countdown)
@@ -301,5 +304,21 @@ func waitForMessage(t *testing.T, ctx context.Context, connection *websocket.Con
 		if message.Type == messageType {
 			return message
 		}
+	}
+}
+
+func assertCommandAck(t *testing.T, message serverMessage, requestID string, duplicate bool) {
+	t.Helper()
+	if message.RequestID != requestID {
+		t.Fatalf("ack request_id = %q, want %q", message.RequestID, requestID)
+	}
+	var payload struct {
+		Duplicate bool `json:"duplicate"`
+	}
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Duplicate != duplicate {
+		t.Fatalf("ack duplicate = %t, want %t", payload.Duplicate, duplicate)
 	}
 }

@@ -61,11 +61,12 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		if err := wsjson.Read(ctx, connection, &message); err != nil {
 			return
 		}
-		if err := h.dispatch(ctx, session, message); err != nil {
+		result, err := h.dispatch(ctx, session, message)
+		if err != nil {
 			h.writeError(ctx, connection, message.RequestID, err)
 			continue
 		}
-		if err := writeMessage(ctx, connection, ServerMessage{Type: "command_accepted", RequestID: message.RequestID}); err != nil {
+		if err := writeMessage(ctx, connection, ServerMessage{Type: "command_accepted", RequestID: message.RequestID, Payload: map[string]bool{"duplicate": result.Duplicate}}); err != nil {
 			return
 		}
 		if message.Type == "leave" {
@@ -133,28 +134,28 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 	}
 }
 
-func (h *Handler) dispatch(ctx context.Context, session *application.Session, message ClientMessage) error {
+func (h *Handler) dispatch(ctx context.Context, session *application.Session, message ClientMessage) (application.CommandResult, error) {
 	switch message.Type {
 	case "start", "next", "finish", "leave":
-		return h.hub.Dispatch(ctx, session, message.Type, 0)
+		return h.hub.DispatchCommand(ctx, session, application.Command{Type: message.Type, RequestID: message.RequestID})
 	case "remove_player":
 		var payload struct {
 			PlayerID string `json:"player_id"`
 		}
 		if err := decodePayload(message.Payload, &payload); err != nil || payload.PlayerID == "" {
-			return game.ErrInvalidPlayer
+			return application.CommandResult{}, game.ErrInvalidPlayer
 		}
-		return h.hub.DispatchPlayer(ctx, session, "remove_player", payload.PlayerID)
+		return h.hub.DispatchCommand(ctx, session, application.Command{Type: "remove_player", RequestID: message.RequestID, PlayerID: payload.PlayerID})
 	case "answer":
 		var payload struct {
 			AnswerID int64 `json:"answer_id"`
 		}
 		if err := decodePayload(message.Payload, &payload); err != nil || payload.AnswerID < 1 {
-			return game.ErrInvalidAnswer
+			return application.CommandResult{}, game.ErrInvalidAnswer
 		}
-		return h.hub.Dispatch(ctx, session, "answer", payload.AnswerID)
+		return h.hub.DispatchCommand(ctx, session, application.Command{Type: "answer", RequestID: message.RequestID, AnswerID: payload.AnswerID})
 	default:
-		return errors.New("unknown command")
+		return application.CommandResult{}, errors.New("unknown command")
 	}
 }
 
@@ -167,7 +168,7 @@ func (h *Handler) writeError(ctx context.Context, connection *websocket.Conn, re
 		code = "game_not_found"
 	case errors.Is(err, game.ErrNicknameTaken):
 		code = "nickname_taken"
-	case errors.Is(err, game.ErrInvalidPlayer), errors.Is(err, game.ErrInvalidAnswer):
+	case errors.Is(err, game.ErrInvalidPlayer), errors.Is(err, game.ErrInvalidAnswer), errors.Is(err, game.ErrInvalidRequestID):
 		code = "invalid_payload"
 	case errors.Is(err, game.ErrInvalidPhase):
 		code = "invalid_phase"

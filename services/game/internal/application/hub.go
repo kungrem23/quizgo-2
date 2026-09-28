@@ -18,7 +18,21 @@ type Role string
 const (
 	RoleHost   Role = "host"
 	RolePlayer Role = "player"
+
+	maxCommandReceipts = 1024
+	maxRequestIDLength = 128
 )
+
+type Command struct {
+	Type      string
+	RequestID string
+	AnswerID  int64
+	PlayerID  string
+}
+
+type CommandResult struct {
+	Duplicate bool
+}
 
 type OutboundEvent struct {
 	Type     string
@@ -161,27 +175,36 @@ func (h *Hub) authenticate(ctx context.Context, gameID, participantID string, ro
 }
 
 func (h *Hub) Dispatch(ctx context.Context, session *Session, command string, answerID int64) error {
-	return h.dispatch(ctx, session, roomRequest{kind: command, session: session, answerID: answerID, now: h.now()})
+	_, err := h.DispatchCommand(ctx, session, Command{Type: command, AnswerID: answerID})
+	return err
 }
 
 func (h *Hub) DispatchPlayer(ctx context.Context, session *Session, command, playerID string) error {
-	return h.dispatch(ctx, session, roomRequest{kind: command, session: session, targetPlayerID: playerID, now: h.now()})
+	_, err := h.DispatchCommand(ctx, session, Command{Type: command, PlayerID: playerID})
+	return err
 }
 
-func (h *Hub) dispatch(ctx context.Context, session *Session, request roomRequest) error {
+func (h *Hub) DispatchCommand(ctx context.Context, session *Session, command Command) (CommandResult, error) {
 	if session == nil || session.room == nil {
-		return game.ErrUnauthorized
+		return CommandResult{}, game.ErrUnauthorized
+	}
+	if len(command.RequestID) > maxRequestIDLength {
+		return CommandResult{}, game.ErrInvalidRequestID
 	}
 	response := make(chan roomResponse, 1)
-	request.response = response
+	request := roomRequest{
+		kind: command.Type, requestID: command.RequestID, session: session,
+		answerID: command.AnswerID, targetPlayerID: command.PlayerID,
+		now: h.now(), response: response,
+	}
 	if err := sendRoomRequest(ctx, session.room, request); err != nil {
-		return err
+		return CommandResult{}, err
 	}
 	result, err := awaitRoomResponse(ctx, session.room, response)
 	if err != nil {
-		return err
+		return CommandResult{}, err
 	}
-	return result.err
+	return CommandResult{Duplicate: result.duplicate}, result.err
 }
 
 func (h *Hub) Disconnect(session *Session) {
@@ -254,14 +277,16 @@ type roomRequest struct {
 	ticketHash     string
 	answerID       int64
 	targetPlayerID string
+	requestID      string
 	now            time.Time
 	response       chan roomResponse
 }
 
 type roomResponse struct {
-	session *Session
-	player  game.Player
-	err     error
+	session   *Session
+	player    game.Player
+	duplicate bool
+	err       error
 }
 
 func sendRoomRequest(ctx context.Context, room *room, request roomRequest) error {
@@ -431,9 +456,13 @@ func (r *room) start(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	err := candidate.Start(request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -448,9 +477,13 @@ func (r *room) answer(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	submission, err := candidate.SubmitAnswer(request.session.ParticipantID, request.answerID, request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -466,9 +499,13 @@ func (r *room) next(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	finished, err := candidate.Next(request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -487,9 +524,13 @@ func (r *room) finish(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	err := candidate.Finish(request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -504,9 +545,13 @@ func (r *room) removePlayer(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	removed, err := candidate.RemovePlayer(request.targetPlayerID, request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -522,9 +567,13 @@ func (r *room) leave(request roomRequest) {
 		r.respond(request, roomResponse{err: game.ErrUnauthorized})
 		return
 	}
+	if r.replay(request) {
+		return
+	}
 	candidate := cloneGame(r.game)
 	removed, err := candidate.RemovePlayer(request.session.ParticipantID, request.now)
 	if err == nil {
+		r.remember(&candidate, request)
 		err = r.persist(candidate)
 	}
 	if err == nil {
@@ -597,6 +646,33 @@ func (r *room) persist(candidate game.Game) error {
 	return r.repository.Update(ctx, candidate, r.ttl)
 }
 
+func (r *room) replay(request roomRequest) bool {
+	if request.requestID == "" || request.session == nil {
+		return false
+	}
+	for _, receipt := range r.game.CommandReceipts {
+		if receipt.ParticipantID == request.session.ParticipantID && receipt.Command == request.kind && receipt.RequestID == request.requestID {
+			r.respond(request, roomResponse{duplicate: true})
+			return true
+		}
+	}
+	return false
+}
+
+func (r *room) remember(candidate *game.Game, request roomRequest) {
+	if request.requestID == "" || request.session == nil {
+		return
+	}
+	candidate.CommandReceipts = append(candidate.CommandReceipts, game.CommandReceipt{
+		ParticipantID: request.session.ParticipantID,
+		Command:       request.kind,
+		RequestID:     request.requestID,
+	})
+	if overflow := len(candidate.CommandReceipts) - maxCommandReceipts; overflow > 0 {
+		candidate.CommandReceipts = append([]game.CommandReceipt(nil), candidate.CommandReceipts[overflow:]...)
+	}
+}
+
 func (r *room) addSubscriber(participantID string, role Role) *Session {
 	session := &Session{
 		ID: uuid.NewString(), GameID: r.game.ID, ParticipantID: participantID, Role: role,
@@ -666,6 +742,7 @@ func cloneGame(value game.Game) game.Game {
 	clone := value
 	clone.Players = append([]game.Player(nil), value.Players...)
 	clone.Submissions = append([]game.Submission(nil), value.Submissions...)
+	clone.CommandReceipts = append([]game.CommandReceipt(nil), value.CommandReceipts...)
 	clone.Quiz.Questions = append([]game.Question(nil), value.Quiz.Questions...)
 	for index := range clone.Quiz.Questions {
 		clone.Quiz.Questions[index].Answers = append([]game.Answer(nil), value.Quiz.Questions[index].Answers...)

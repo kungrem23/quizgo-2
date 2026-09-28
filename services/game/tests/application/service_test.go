@@ -5,6 +5,7 @@ import . "github.com/kungrem23/quizgo/services/game/internal/application"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -180,8 +181,9 @@ func TestHubLobbyCommandsEnforceOwnershipAndPersistRemoval(t *testing.T) {
 	if err := hub.DispatchPlayer(context.Background(), alice.Session, "remove_player", bob.Player.ID); !errors.Is(err, game.ErrUnauthorized) {
 		t.Fatalf("player removing another player error = %v", err)
 	}
-	if err := hub.DispatchPlayer(context.Background(), host, "remove_player", alice.Player.ID); err != nil {
-		t.Fatal(err)
+	removedResult, err := hub.DispatchCommand(context.Background(), host, Command{Type: "remove_player", RequestID: "remove-alice", PlayerID: alice.Player.ID})
+	if err != nil || removedResult.Duplicate {
+		t.Fatalf("first remove player = %#v, %v", removedResult, err)
 	}
 	removed := waitForEvent(t, bob.Session.Events, "player_removed", 2*time.Second)
 	if player, ok := removed.Payload.(PlayerView); !ok || player.ID != alice.Player.ID {
@@ -189,6 +191,10 @@ func TestHubLobbyCommandsEnforceOwnershipAndPersistRemoval(t *testing.T) {
 	}
 	waitForEvent(t, alice.Session.Events, "player_removed", 2*time.Second)
 	waitForClosed(t, alice.Session.Events, 2*time.Second)
+	repeatedRemove, err := hub.DispatchCommand(context.Background(), host, Command{Type: "remove_player", RequestID: "remove-alice", PlayerID: alice.Player.ID})
+	if err != nil || !repeatedRemove.Duplicate {
+		t.Fatalf("repeated remove player = %#v, %v", repeatedRemove, err)
+	}
 	if _, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, alice.Player.ID, alice.Ticket); !errors.Is(err, game.ErrUnauthorized) {
 		t.Fatalf("removed player reconnect error = %v", err)
 	}
@@ -311,6 +317,218 @@ func TestHubHostFinishIsAuthorizedAndPhaseChecked(t *testing.T) {
 	}
 	if persisted.Phase != game.PhaseFinished {
 		t.Fatalf("finish was not persisted: %#v", persisted)
+	}
+}
+
+func TestHubDeduplicatesStartAndTreatsDifferentRequestIDAsNew(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(repository, time.Hour)
+	defer hub.Close()
+	if _, err := hub.Join(context.Background(), created.Game.Code, "Alice"); err != nil {
+		t.Fatal(err)
+	}
+	host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := hub.DispatchCommand(context.Background(), host, Command{Type: "start", RequestID: "start-1"})
+	if err != nil || first.Duplicate {
+		t.Fatalf("first start = %#v, %v", first, err)
+	}
+	started, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := hub.DispatchCommand(context.Background(), host, Command{Type: "start", RequestID: "start-1"})
+	if err != nil || !repeated.Duplicate {
+		t.Fatalf("repeated start = %#v, %v", repeated, err)
+	}
+	afterRepeat, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRepeat.Sequence != started.Sequence || len(afterRepeat.CommandReceipts) != 1 {
+		t.Fatalf("duplicate start changed state: before=%#v after=%#v", started, afterRepeat)
+	}
+
+	if result, err := hub.DispatchCommand(context.Background(), host, Command{Type: "start", RequestID: "start-2"}); !errors.Is(err, game.ErrInvalidPhase) || result.Duplicate {
+		t.Fatalf("different request id start = %#v, %v", result, err)
+	}
+}
+
+func TestHubDeduplicatesAnswerAfterReconnectAndRecovery(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 60,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(repository, time.Hour)
+	player, err := hub.Join(context.Background(), created.Game.Code, "Alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.DispatchCommand(context.Background(), host, Command{Type: "start", RequestID: "start-1"}); err != nil {
+		t.Fatal(err)
+	}
+	waitForEvent(t, player.Session.Events, "question_opened", 5*time.Second)
+	first, err := hub.DispatchCommand(context.Background(), player.Session, Command{Type: "answer", RequestID: "answer-1", AnswerID: 1})
+	if err != nil || first.Duplicate {
+		t.Fatalf("first answer = %#v, %v", first, err)
+	}
+	answered, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answered.Submissions) != 1 {
+		t.Fatalf("submissions after first answer = %d", len(answered.Submissions))
+	}
+	hub.Close()
+
+	recoveredHub := NewHub(repository, time.Hour)
+	defer recoveredHub.Close()
+	reconnected, err := recoveredHub.AuthenticatePlayer(context.Background(), created.Game.ID, player.Player.ID, player.Ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForEvent(t, reconnected.Events, "state", 2*time.Second)
+	repeated, err := recoveredHub.DispatchCommand(context.Background(), reconnected, Command{Type: "answer", RequestID: "answer-1", AnswerID: 2})
+	if err != nil || !repeated.Duplicate {
+		t.Fatalf("repeated answer after recovery = %#v, %v", repeated, err)
+	}
+	afterRepeat, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRepeat.Sequence != answered.Sequence || len(afterRepeat.Submissions) != 1 || afterRepeat.Submissions[0].AnswerID != 1 {
+		t.Fatalf("duplicate answer changed state: before=%#v after=%#v", answered, afterRepeat)
+	}
+	if result, err := recoveredHub.DispatchCommand(context.Background(), reconnected, Command{Type: "answer", RequestID: "answer-2", AnswerID: 2}); !errors.Is(err, game.ErrAlreadyAnswered) || result.Duplicate {
+		t.Fatalf("different request id answer = %#v, %v", result, err)
+	}
+}
+
+func TestHubDeduplicatesNext(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{
+			{ID: 1, Text: "Q1", TimeLimitSeconds: 10, Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}}},
+			{ID: 2, Text: "Q2", TimeLimitSeconds: 10, Answers: []game.Answer{{ID: 3, Text: "A", IsCorrect: true}, {ID: 4, Text: "B"}}},
+		},
+	}
+	repository := &repositoryStub{}
+	service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Add(-time.Minute)
+	prepared := created.Game
+	if _, err := prepared.AddPlayer("player-1", "Alice", "ticket-hash", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.Start(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.OpenCurrentQuestion(now.Add(game.CountdownDuration)); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepared.CloseQuestion(now.Add(game.CountdownDuration + time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	repository.saved = prepared
+
+	hub := NewHub(repository, time.Hour)
+	defer hub.Close()
+	host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := hub.DispatchCommand(context.Background(), host, Command{Type: "next", RequestID: "next-1"})
+	if err != nil || first.Duplicate {
+		t.Fatalf("first next = %#v, %v", first, err)
+	}
+	advanced, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advanced.CurrentQuestionIndex != 1 {
+		t.Fatalf("question index after next = %d", advanced.CurrentQuestionIndex)
+	}
+	repeated, err := hub.DispatchCommand(context.Background(), host, Command{Type: "next", RequestID: "next-1"})
+	if err != nil || !repeated.Duplicate {
+		t.Fatalf("repeated next = %#v, %v", repeated, err)
+	}
+	afterRepeat, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRepeat.Sequence != advanced.Sequence || afterRepeat.CurrentQuestionIndex != 1 {
+		t.Fatalf("duplicate next changed state: before=%#v after=%#v", advanced, afterRepeat)
+	}
+}
+
+func TestHubBoundsPersistedCommandReceipts(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := created.Game
+	for index := 0; index < 1100; index++ {
+		prepared.CommandReceipts = append(prepared.CommandReceipts, game.CommandReceipt{
+			ParticipantID: "host", Command: "finish", RequestID: fmt.Sprintf("old-%d", index),
+		})
+	}
+	repository.saved = prepared
+
+	hub := NewHub(repository, time.Hour)
+	defer hub.Close()
+	host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.DispatchCommand(context.Background(), host, Command{Type: "finish", RequestID: "newest"}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted.CommandReceipts) != 1024 || persisted.CommandReceipts[len(persisted.CommandReceipts)-1].RequestID != "newest" {
+		t.Fatalf("unexpected bounded receipts: count=%d last=%#v", len(persisted.CommandReceipts), persisted.CommandReceipts[len(persisted.CommandReceipts)-1])
 	}
 }
 

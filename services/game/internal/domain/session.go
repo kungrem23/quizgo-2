@@ -18,6 +18,7 @@ var (
 	ErrQuestionClosed      = errors.New("question is closed")
 	ErrCountdownActive     = errors.New("question countdown is still active")
 	ErrUnauthorized        = errors.New("invalid participant credentials")
+	ErrInvalidRequestID    = errors.New("invalid request id")
 )
 
 const CountdownDuration = 3 * time.Second
@@ -44,22 +45,32 @@ type Answer struct {
 	IsCorrect bool   `json:"is_correct"`
 }
 
+// CommandReceipt records an authenticated command that was already applied.
+// Receipts are persisted with the game so retries remain idempotent after a
+// reconnect or process restart.
+type CommandReceipt struct {
+	ParticipantID string `json:"participant_id"`
+	Command       string `json:"command"`
+	RequestID     string `json:"request_id"`
+}
+
 type Game struct {
-	ID                   string       `json:"id"`
-	Code                 string       `json:"code"`
-	HostUserID           int64        `json:"host_user_id"`
-	HostTicketHash       string       `json:"host_ticket_hash"`
-	Quiz                 QuizSnapshot `json:"quiz"`
-	Players              []Player     `json:"players"`
-	Submissions          []Submission `json:"submissions"`
-	Phase                Phase        `json:"phase"`
-	CurrentQuestionIndex int          `json:"current_question_index"`
-	CountdownEndsAt      *time.Time   `json:"countdown_ends_at,omitempty"`
-	QuestionOpenedAt     *time.Time   `json:"question_opened_at,omitempty"`
-	QuestionClosesAt     *time.Time   `json:"question_closes_at,omitempty"`
-	Sequence             uint64       `json:"sequence"`
-	CreatedAt            time.Time    `json:"created_at"`
-	LastActivity         time.Time    `json:"last_activity"`
+	ID                   string           `json:"id"`
+	Code                 string           `json:"code"`
+	HostUserID           int64            `json:"host_user_id"`
+	HostTicketHash       string           `json:"host_ticket_hash"`
+	Quiz                 QuizSnapshot     `json:"quiz"`
+	Players              []Player         `json:"players"`
+	Submissions          []Submission     `json:"submissions"`
+	CommandReceipts      []CommandReceipt `json:"command_receipts,omitempty"`
+	Phase                Phase            `json:"phase"`
+	CurrentQuestionIndex int              `json:"current_question_index"`
+	CountdownEndsAt      *time.Time       `json:"countdown_ends_at,omitempty"`
+	QuestionOpenedAt     *time.Time       `json:"question_opened_at,omitempty"`
+	QuestionClosesAt     *time.Time       `json:"question_closes_at,omitempty"`
+	Sequence             uint64           `json:"sequence"`
+	CreatedAt            time.Time        `json:"created_at"`
+	LastActivity         time.Time        `json:"last_activity"`
 }
 
 func NewGame(id, code string, hostUserID int64, snapshot QuizSnapshot, now time.Time) (Game, error) {
