@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -16,13 +17,40 @@ import (
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
 )
 
+const (
+	defaultPingInterval = 30 * time.Second
+	defaultPongTimeout  = 10 * time.Second
+)
+
 type Handler struct {
-	hub    *application.Hub
-	logger *log.Logger
+	hub          *application.Hub
+	logger       *log.Logger
+	pingInterval time.Duration
+	pongTimeout  time.Duration
+}
+
+// Options configures WebSocket liveness checks.
+type Options struct {
+	PingInterval time.Duration
+	PongTimeout  time.Duration
 }
 
 func New(hub *application.Hub, logger *log.Logger) *Handler {
-	return &Handler{hub: hub, logger: logger}
+	return NewWithOptions(hub, logger, Options{})
+}
+
+// NewWithOptions creates a handler with custom WebSocket liveness settings.
+func NewWithOptions(hub *application.Hub, logger *log.Logger, options Options) *Handler {
+	if options.PingInterval <= 0 {
+		options.PingInterval = defaultPingInterval
+	}
+	if options.PongTimeout <= 0 {
+		options.PongTimeout = defaultPongTimeout
+	}
+	return &Handler{
+		hub: hub, logger: logger,
+		pingInterval: options.PingInterval, pongTimeout: options.PongTimeout,
+	}
 }
 
 func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -37,7 +65,6 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	connection.SetReadLimit(64 << 10)
 	ctx, cancel := context.WithCancel(request.Context())
 	defer cancel()
-	defer connection.Close(websocket.StatusNormalClosure, "connection closed")
 
 	session, err := h.handshake(ctx, connection)
 	if err != nil {
@@ -45,14 +72,56 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		_ = connection.Close(websocket.StatusPolicyViolation, "handshake failed")
 		return
 	}
-	defer h.hub.Disconnect(session)
 
+	var workers sync.WaitGroup
+	var stopOnce sync.Once
+	stop := func() {
+		stopOnce.Do(func() {
+			cancel()
+			_ = connection.CloseNow()
+		})
+	}
+	defer func() {
+		stop()
+		workers.Wait()
+		h.hub.Disconnect(session)
+	}()
+
+	workers.Add(1)
 	go func() {
-		defer cancel()
-		for event := range session.Events {
-			if err := writeMessage(ctx, connection, ServerMessage{Type: event.Type, Sequence: event.Sequence, Payload: event.Payload}); err != nil {
+		defer workers.Done()
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case event, ok := <-session.Events:
+				if !ok {
+					stop()
+					return
+				}
+				if err := writeMessage(ctx, connection, ServerMessage{Type: event.Type, Sequence: event.Sequence, Payload: event.Payload}); err != nil {
+					stop()
+					return
+				}
 			}
+		}
+	}()
+
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		select {
+		case <-ctx.Done():
+		case <-session.Replaced():
+			stop()
+		}
+	}()
+
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		if err := heartbeat(ctx, connection, h.pingInterval, h.pongTimeout); err != nil {
+			stop()
 		}
 	}()
 
@@ -70,6 +139,7 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 		if message.Type == "leave" {
+			_ = connection.Close(websocket.StatusNormalClosure, "connection closed")
 			return
 		}
 	}
@@ -203,4 +273,22 @@ func writeMessage(ctx context.Context, connection *websocket.Conn, message Serve
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return wsjson.Write(writeCtx, connection, message)
+}
+
+func heartbeat(ctx context.Context, connection *websocket.Conn, pingInterval, pongTimeout time.Duration) error {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, pongTimeout)
+			err := connection.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+	}
 }

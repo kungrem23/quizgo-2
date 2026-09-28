@@ -215,6 +215,96 @@ func TestWebSocketLobbyLifecycleAndAuthorization(t *testing.T) {
 	waitForError(t, ctx, hostConnection, "remove-after-finish", "invalid_phase")
 }
 
+func TestWebSocketReconnectClosesReplacedConnection(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := application.NewHub(repository, time.Hour)
+	defer hub.Close()
+	server := httptest.NewServer(websockettransport.New(hub, log.New(io.Discard, "", 0)))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	oldConnection, joined := joinPlayer(t, ctx, wsURL, created.Game.Code, "Alice")
+	defer oldConnection.CloseNow()
+	replacement, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacement.Close(websocket.StatusNormalClosure, "test complete")
+	writeClientMessage(t, ctx, replacement, "player_auth", "reconnect", map[string]any{
+		"game_id": created.Game.ID, "participant_id": joined.PlayerID, "ticket": joined.Ticket,
+	})
+	waitForMessage(t, ctx, replacement, "authenticated")
+	state := waitForMessage(t, ctx, replacement, "state")
+	if !strings.Contains(string(state.Payload), `"phase":"lobby"`) || !strings.Contains(string(state.Payload), joined.PlayerID) {
+		t.Fatalf("unexpected reconnect state: %s", state.Payload)
+	}
+
+	readUntilClosed(t, ctx, oldConnection)
+	writeClientMessage(t, ctx, replacement, "answer", "still-current", map[string]any{"answer_id": 1})
+	waitForError(t, ctx, replacement, "still-current", "invalid_phase")
+}
+
+func TestWebSocketHeartbeatClosesUnresponsiveConnectionAndAllowsReconnect(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := application.NewHub(repository, time.Hour)
+	defer hub.Close()
+	handler := websockettransport.NewWithOptions(hub, log.New(io.Discard, "", 0), websockettransport.Options{
+		PingInterval: 20 * time.Millisecond,
+		PongTimeout:  30 * time.Millisecond,
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	unresponsive, joined := joinPlayerWithOptions(t, ctx, wsURL, created.Game.Code, "Alice", &websocket.DialOptions{
+		OnPingReceived: func(context.Context, []byte) bool { return false },
+	})
+	defer unresponsive.CloseNow()
+	readUntilClosed(t, ctx, unresponsive)
+
+	reconnected, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reconnected.Close(websocket.StatusNormalClosure, "test complete")
+	writeClientMessage(t, ctx, reconnected, "player_auth", "after-heartbeat", map[string]any{
+		"game_id": created.Game.ID, "participant_id": joined.PlayerID, "ticket": joined.Ticket,
+	})
+	waitForMessage(t, ctx, reconnected, "authenticated")
+	state := waitForMessage(t, ctx, reconnected, "state")
+	if !strings.Contains(string(state.Payload), joined.PlayerID) {
+		t.Fatalf("player state was lost after heartbeat disconnect: %s", state.Payload)
+	}
+}
+
 func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket.Conn, messageType, requestID string, payload any) {
 	t.Helper()
 	raw := json.RawMessage(nil)
@@ -232,7 +322,12 @@ func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket
 
 func joinPlayer(t *testing.T, ctx context.Context, wsURL, code, nickname string) (*websocket.Conn, joinedPayload) {
 	t.Helper()
-	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	return joinPlayerWithOptions(t, ctx, wsURL, code, nickname, nil)
+}
+
+func joinPlayerWithOptions(t *testing.T, ctx context.Context, wsURL, code, nickname string, options *websocket.DialOptions) (*websocket.Conn, joinedPayload) {
+	t.Helper()
+	connection, _, err := websocket.Dial(ctx, wsURL, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,6 +398,16 @@ func waitForMessage(t *testing.T, ctx context.Context, connection *websocket.Con
 		}
 		if message.Type == messageType {
 			return message
+		}
+	}
+}
+
+func readUntilClosed(t *testing.T, ctx context.Context, connection *websocket.Conn) {
+	t.Helper()
+	for {
+		var message serverMessage
+		if err := wsjson.Read(ctx, connection, &message); err != nil {
+			return
 		}
 	}
 }

@@ -46,8 +46,20 @@ type Session struct {
 	ParticipantID string
 	Role          Role
 	Events        <-chan OutboundEvent
+	Done          <-chan struct{}
 	room          *room
 	events        chan OutboundEvent
+	done          chan struct{}
+	replaced      chan struct{}
+}
+
+// Replaced returns a channel that closes when a newer authenticated session
+// takes ownership of the participant.
+func (s *Session) Replaced() <-chan struct{} {
+	if s == nil {
+		return nil
+	}
+	return s.replaced
 }
 
 type JoinedPlayer struct {
@@ -674,11 +686,18 @@ func (r *room) remember(candidate *game.Game, request roomRequest) {
 }
 
 func (r *room) addSubscriber(participantID string, role Role) *Session {
+	for id, session := range r.subscribers {
+		if session.ParticipantID == participantID && session.Role == role {
+			close(session.replaced)
+			r.removeSubscriber(id)
+		}
+	}
 	session := &Session{
 		ID: uuid.NewString(), GameID: r.game.ID, ParticipantID: participantID, Role: role,
-		room: r, events: make(chan OutboundEvent, 32),
+		room: r, events: make(chan OutboundEvent, 32), done: make(chan struct{}), replaced: make(chan struct{}),
 	}
 	session.Events = session.events
+	session.Done = session.done
 	r.subscribers[session.ID] = session
 	return session
 }
@@ -686,6 +705,7 @@ func (r *room) addSubscriber(participantID string, role Role) *Session {
 func (r *room) removeSubscriber(id string) {
 	if session := r.subscribers[id]; session != nil {
 		delete(r.subscribers, id)
+		close(session.done)
 		close(session.events)
 	}
 }

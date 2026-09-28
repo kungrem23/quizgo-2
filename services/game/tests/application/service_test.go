@@ -97,20 +97,21 @@ func TestHubRunsGameLifecycleAndPersistsEveryTransition(t *testing.T) {
 	if _, err := hub.AuthenticateHost(context.Background(), created.Game.ID, "wrong-ticket"); !errors.Is(err, game.ErrUnauthorized) {
 		t.Fatalf("wrong host ticket error = %v", err)
 	}
-	if _, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket); err != nil {
+	playerSession, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket)
+	if err != nil {
 		t.Fatalf("reconnect player: %v", err)
 	}
 	host, err := hub.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := hub.Dispatch(context.Background(), joined.Session, "start", 0); !errors.Is(err, game.ErrUnauthorized) {
+	if err := hub.Dispatch(context.Background(), playerSession, "start", 0); !errors.Is(err, game.ErrUnauthorized) {
 		t.Fatalf("player start error = %v", err)
 	}
 	if err := hub.Dispatch(context.Background(), host, "start", 0); err != nil {
 		t.Fatal(err)
 	}
-	countdown := waitForEvent(t, joined.Session.Events, "countdown_started", 2*time.Second)
+	countdown := waitForEvent(t, playerSession.Events, "countdown_started", 2*time.Second)
 	countdownState, ok := countdown.Payload.(StateView)
 	if !ok || countdownState.Phase != game.PhaseCountdown || countdownState.CountdownEndsAt == nil || countdownState.CurrentQuestion != nil {
 		t.Fatalf("unexpected countdown payload: %#v", countdown.Payload)
@@ -123,13 +124,13 @@ func TestHubRunsGameLifecycleAndPersistsEveryTransition(t *testing.T) {
 	if state, ok := reconnectedCountdownState.Payload.(StateView); !ok || state.Phase != game.PhaseCountdown || state.CountdownEndsAt == nil {
 		t.Fatalf("unexpected reconnected countdown state: %#v", reconnectedCountdownState.Payload)
 	}
-	waitForEvent(t, joined.Session.Events, "question_opened", 5*time.Second)
-	if err := hub.Dispatch(context.Background(), joined.Session, "answer", 1); err != nil {
+	waitForEvent(t, reconnectedDuringCountdown.Events, "question_opened", 5*time.Second)
+	if err := hub.Dispatch(context.Background(), reconnectedDuringCountdown, "answer", 1); err != nil {
 		t.Fatal(err)
 	}
-	waitForEvent(t, joined.Session.Events, "answer_accepted", 2*time.Second)
-	waitForEvent(t, joined.Session.Events, "question_closed", 3*time.Second)
-	waitForEvent(t, joined.Session.Events, "game_finished", 2*time.Second)
+	waitForEvent(t, reconnectedDuringCountdown.Events, "answer_accepted", 2*time.Second)
+	waitForEvent(t, reconnectedDuringCountdown.Events, "question_closed", 3*time.Second)
+	waitForEvent(t, reconnectedDuringCountdown.Events, "game_finished", 2*time.Second)
 	reconnectedAfterFinish, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket)
 	if err != nil {
 		t.Fatal(err)
@@ -145,6 +146,145 @@ func TestHubRunsGameLifecycleAndPersistsEveryTransition(t *testing.T) {
 	}
 	if persisted.Phase != game.PhaseFinished || len(persisted.Submissions) != 1 || persisted.Players[0].Score < 500 {
 		t.Fatalf("unexpected persisted game: %#v", persisted)
+	}
+}
+
+func TestHubReconnectReplacesOldPlayerSession(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(repository, time.Hour)
+	defer hub.Close()
+
+	joined, err := hub.Join(context.Background(), created.Game.Code, "Alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reconnected, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForDone(t, joined.Session.Done, 2*time.Second)
+	if _, err := hub.DispatchCommand(context.Background(), joined.Session, Command{Type: "answer", AnswerID: 1}); !errors.Is(err, game.ErrUnauthorized) {
+		t.Fatalf("old session command error = %v", err)
+	}
+	if _, err := hub.DispatchCommand(context.Background(), reconnected, Command{Type: "answer", AnswerID: 1}); !errors.Is(err, game.ErrInvalidPhase) {
+		t.Fatalf("replacement session command error = %v", err)
+	}
+
+	hub.Disconnect(joined.Session)
+	if _, err := hub.DispatchCommand(context.Background(), reconnected, Command{Type: "answer", AnswerID: 1}); !errors.Is(err, game.ErrInvalidPhase) {
+		t.Fatalf("old disconnect invalidated replacement: %v", err)
+	}
+	persisted, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted.Players) != 1 || persisted.Players[0].ID != joined.Player.ID {
+		t.Fatalf("reconnect changed persisted player state: %#v", persisted.Players)
+	}
+}
+
+func TestHubPlayerReconnectReturnsCurrentStateInEveryPhase(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{
+			{ID: 1, Text: "Q1", TimeLimitSeconds: 60, Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}}},
+			{ID: 2, Text: "Q2", TimeLimitSeconds: 60, Answers: []game.Answer{{ID: 3, Text: "A", IsCorrect: true}, {ID: 4, Text: "B"}}},
+		},
+	}
+	tests := []struct {
+		name    string
+		phase   game.Phase
+		prepare func(*game.Game, time.Time) error
+	}{
+		{name: "lobby", phase: game.PhaseLobby, prepare: func(*game.Game, time.Time) error { return nil }},
+		{name: "countdown", phase: game.PhaseCountdown, prepare: func(value *game.Game, now time.Time) error {
+			return value.Start(now)
+		}},
+		{name: "question", phase: game.PhaseQuestionOpen, prepare: func(value *game.Game, now time.Time) error {
+			if err := value.Start(now.Add(-game.CountdownDuration)); err != nil {
+				return err
+			}
+			return value.OpenCurrentQuestion(now)
+		}},
+		{name: "scoreboard", phase: game.PhaseScoreboard, prepare: func(value *game.Game, now time.Time) error {
+			if err := value.Start(now.Add(-game.CountdownDuration)); err != nil {
+				return err
+			}
+			if err := value.OpenCurrentQuestion(now); err != nil {
+				return err
+			}
+			return value.CloseQuestion(now.Add(time.Second))
+		}},
+		{name: "finished", phase: game.PhaseFinished, prepare: func(value *game.Game, now time.Time) error {
+			return value.Finish(now)
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &repositoryStub{}
+			service := New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+			created, err := service.CreateGame(context.Background(), CreateGameRequest{QuizID: 8, AccessToken: "token"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			initialHub := NewHub(repository, time.Hour)
+			joined, err := initialHub.Join(context.Background(), created.Game.Code, "Alice")
+			if err != nil {
+				initialHub.Close()
+				t.Fatal(err)
+			}
+			initialHub.Close()
+
+			prepared, err := repository.GetByID(context.Background(), created.Game.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := test.prepare(&prepared, time.Now().UTC()); err != nil {
+				t.Fatal(err)
+			}
+			if err := repository.Update(context.Background(), prepared, time.Hour); err != nil {
+				t.Fatal(err)
+			}
+
+			hub := NewHub(repository, time.Hour)
+			defer hub.Close()
+			session, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			event := waitForEvent(t, session.Events, "state", 2*time.Second)
+			state, ok := event.Payload.(StateView)
+			if !ok || state.Phase != test.phase || len(state.Players) != 1 || state.Players[0].ID != joined.Player.ID {
+				t.Fatalf("unexpected reconnect state: %#v", event.Payload)
+			}
+			switch test.phase {
+			case game.PhaseCountdown:
+				if state.CountdownEndsAt == nil || state.CurrentQuestion != nil {
+					t.Fatalf("unexpected countdown state: %#v", state)
+				}
+			case game.PhaseQuestionOpen:
+				if state.QuestionClosesAt == nil || state.CurrentQuestion == nil || len(state.CorrectAnswerIDs) != 0 {
+					t.Fatalf("unexpected question state: %#v", state)
+				}
+			case game.PhaseScoreboard:
+				if state.CurrentQuestion == nil || len(state.CorrectAnswerIDs) != 1 || state.CorrectAnswerIDs[0] != 1 {
+					t.Fatalf("unexpected scoreboard state: %#v", state)
+				}
+			}
+		})
 	}
 }
 
@@ -672,5 +812,16 @@ func waitForClosed(t *testing.T, events <-chan OutboundEvent, timeout time.Durat
 		}
 	case <-timer.C:
 		t.Fatal("timed out waiting for event stream to close")
+	}
+}
+
+func waitForDone(t *testing.T, done <-chan struct{}, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		t.Fatal("timed out waiting for session to end")
 	}
 }
