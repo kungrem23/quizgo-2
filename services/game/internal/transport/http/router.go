@@ -9,13 +9,12 @@ import (
 	"strings"
 
 	"github.com/kungrem23/quizgo/services/game/internal/application"
-	game "github.com/kungrem23/quizgo/services/game/internal/domain"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type GameService interface {
-	CreateGame(context.Context, application.CreateGameRequest) (game.Game, error)
+	CreateGame(context.Context, application.CreateGameRequest) (application.CreatedGame, error)
 }
 
 type Dependency struct {
@@ -23,7 +22,7 @@ type Dependency struct {
 	Check func(context.Context) error
 }
 
-func New(service GameService, dependencies ...Dependency) http.Handler {
+func New(service GameService, realtime http.Handler, dependencies ...Dependency) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
@@ -40,9 +39,13 @@ func New(service GameService, dependencies ...Dependency) http.Handler {
 	mux.HandleFunc("POST /api/games", func(writer http.ResponseWriter, request *http.Request) {
 		handleCreateGame(writer, request, service)
 	})
-	mux.HandleFunc("GET /ws", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSON(writer, http.StatusNotImplemented, map[string]string{"error": "websocket transport is not implemented yet"})
-	})
+	if realtime == nil {
+		mux.HandleFunc("GET /ws", func(writer http.ResponseWriter, _ *http.Request) {
+			writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "websocket transport is unavailable"})
+		})
+	} else {
+		mux.Handle("GET /ws", realtime)
+	}
 	return mux
 }
 
@@ -72,7 +75,8 @@ func handleCreateGame(writer http.ResponseWriter, request *http.Request, service
 		return
 	}
 	writeJSON(writer, http.StatusCreated, map[string]any{
-		"id": created.ID, "code": created.Code, "phase": created.Phase, "quiz_revision": created.Quiz.Revision,
+		"id": created.Game.ID, "code": created.Game.Code, "phase": created.Game.Phase,
+		"quiz_revision": created.Game.Quiz.Revision, "host_ticket": created.HostTicket,
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/kungrem23/quizgo/services/game/internal/config"
 	redisstore "github.com/kungrem23/quizgo/services/game/internal/store/redis"
 	httptransport "github.com/kungrem23/quizgo/services/game/internal/transport/http"
+	websockettransport "github.com/kungrem23/quizgo/services/game/internal/transport/ws"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -47,8 +48,10 @@ func run() error {
 	})
 	defer games.Close()
 	gameService := application.New(quizgrpc.New(quizConnection, settings.Quiz.ServiceToken), games, settings.GameTTL)
+	hub := application.NewHub(games, settings.GameTTL)
+	defer hub.Close()
 	healthClient := grpc_health_v1.NewHealthClient(quizConnection)
-	router := httptransport.New(gameService,
+	router := httptransport.New(gameService, websockettransport.New(hub, log.Default()),
 		httptransport.Dependency{Name: "redis", Check: withTimeout(games.Ping)},
 		httptransport.Dependency{Name: "quiz", Check: withTimeout(func(ctx context.Context) error {
 			response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "quiz.v1.QuizCatalogService"})

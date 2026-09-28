@@ -1,7 +1,7 @@
 # QuizGo
 
 Проект разделён на два сервиса: `quiz` отвечает за CRUD и каталог квизов, `game` —
-за игровые сессии и будущий realtime-протокол. Они общаются только через контракт
+за игровые сессии и realtime-протокол. Они общаются только через контракт
 `api/quiz/v1/quiz.proto`; game не подключается к PostgreSQL quiz-сервиса.
 
 ```text
@@ -32,7 +32,8 @@ docker compose up --build -d --wait
 через интерфейс — база при первом запуске пустая.
 
 Compose собирает оба Go-сервиса и React-приложение, запускает PostgreSQL 18, Redis и Nginx.
-Nginx раздаёт сборку Vite и проксирует `/api`, `/auth`, `/swagger` в quiz-сервис;
+Nginx раздаёт сборку Vite, проксирует CRUD-маршруты в quiz-сервис, а
+`/api/games` и `/ws` — в game-сервис;
 прямые ссылки React Router также работают. На хост публикуется только порт
 интерфейса, доступный локально. PostgreSQL и API доступны внутри Docker-сети.
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_SSLMODE` и `QUIZ_HTTP_PORT` из локального
@@ -46,7 +47,7 @@ Nginx раздаёт сборку Vite и проксирует `/api`, `/auth`, 
 ```sh
 docker compose logs -f          # логи всех сервисов
 docker compose logs -f quiz     # логи CRUD API
-docker compose logs -f game     # логи game skeleton
+docker compose logs -f game     # логи realtime game-сервиса
 docker compose ps              # состояние контейнеров
 docker compose down            # остановить и удалить контейнеры, сохранить данные
 docker compose up --build -d --wait  # пересобрать после изменения исходников
@@ -183,9 +184,10 @@ npm run dev --prefix services/quiz/frontend
 При запуске через `go run` или `scripts/dev.sh` переменные S3 нужно экспортировать
 в окружение процесса: `.env` автоматически читает только Docker Compose.
 
-Если API слушает другой порт, задайте `QUIZ_HTTP_PORT` для backend и
-`QUIZ_API_PROXY` для Vite (пример в `services/quiz/frontend/.env.example`). Запросы `/api`
-и `/auth` идут через Vite proxy, CORS для локальной разработки не нужен.
+Если API слушают другие порты, задайте `QUIZ_HTTP_PORT` для CRUD backend,
+`QUIZ_API_PROXY` и `QUIZ_GAME_PROXY` для Vite (пример в
+`services/quiz/frontend/.env.example`). CRUD-запросы, `/api/games` и `/ws` идут
+через Vite proxy, CORS для локальной разработки не нужен.
 `VITE_*` переменные с секретами не используются.
 
 ## Готовая сборка на одном origin

@@ -31,6 +31,15 @@ redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[2])
 return 1
 `)
 
+var updateGame = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[2])
+return 1
+`)
+
 func New(config Config) *Store {
 	return &Store{client: redis.NewClient(&redis.Options{
 		Addr: config.Address, Password: config.Password, DB: config.DB, Protocol: 2,
@@ -68,9 +77,29 @@ func (s *Store) Save(ctx context.Context, value game.Game, ttl time.Duration) er
 	return nil
 }
 
+func (s *Store) Update(ctx context.Context, value game.Game, ttl time.Duration) error {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal game: %w", err)
+	}
+	result, err := updateGame.Run(ctx, s.client,
+		[]string{gameKey(value.ID), codeKey(value.Code)}, payload, strconv.FormatInt(ttl.Milliseconds(), 10), value.ID,
+	).Int()
+	if err != nil {
+		return err
+	}
+	if result == 0 {
+		return game.ErrGameNotFound
+	}
+	return nil
+}
+
 func (s *Store) GetByID(ctx context.Context, id string) (game.Game, error) {
 	payload, err := s.client.Get(ctx, gameKey(id)).Bytes()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return game.Game{}, game.ErrGameNotFound
+		}
 		return game.Game{}, err
 	}
 	var result game.Game
@@ -78,6 +107,17 @@ func (s *Store) GetByID(ctx context.Context, id string) (game.Game, error) {
 		return game.Game{}, fmt.Errorf("decode game: %w", err)
 	}
 	return result, nil
+}
+
+func (s *Store) GetByCode(ctx context.Context, code string) (game.Game, error) {
+	id, err := s.client.Get(ctx, codeKey(code)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return game.Game{}, game.ErrGameNotFound
+		}
+		return game.Game{}, err
+	}
+	return s.GetByID(ctx, id)
 }
 
 func gameKey(id string) string   { return "game:session:" + id }

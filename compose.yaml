@@ -137,6 +137,8 @@ services:
     depends_on:
       quiz:
         condition: service_healthy
+      game:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 10s
