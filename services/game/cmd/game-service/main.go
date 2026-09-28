@@ -51,7 +51,20 @@ func run() error {
 	hub := application.NewHub(games, settings.GameTTL)
 	defer hub.Close()
 	healthClient := grpc_health_v1.NewHealthClient(quizConnection)
-	router := httptransport.New(gameService, websockettransport.New(hub, log.Default()),
+	websocketHandler := websockettransport.NewWithOptions(hub, log.Default(), websockettransport.Options{
+		MaxMessageBytes:     settings.WebSocket.MaxMessageBytes,
+		HandshakeTimeout:    settings.WebSocket.HandshakeTimeout,
+		CommandTimeout:      settings.WebSocket.CommandTimeout,
+		WriteTimeout:        settings.WebSocket.WriteTimeout,
+		PingInterval:        settings.WebSocket.PingInterval,
+		PongTimeout:         settings.WebSocket.PongTimeout,
+		PlayerCommandRate:   settings.WebSocket.PlayerCommandRate,
+		PlayerCommandBurst:  settings.WebSocket.PlayerCommandBurst,
+		HostCommandRate:     settings.WebSocket.HostCommandRate,
+		HostCommandBurst:    settings.WebSocket.HostCommandBurst,
+		InvalidMessageLimit: settings.WebSocket.InvalidMessageLimit,
+	})
+	router := httptransport.New(gameService, websocketHandler,
 		httptransport.Dependency{Name: "redis", Check: withTimeout(games.Ping)},
 		httptransport.Dependency{Name: "quiz", Check: withTimeout(func(ctx context.Context) error {
 			response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "quiz.v1.QuizCatalogService"})

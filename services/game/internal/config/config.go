@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	HTTPPort string
-	Quiz     QuizGRPC
-	Redis    Redis
-	GameTTL  time.Duration
+	HTTPPort  string
+	Quiz      QuizGRPC
+	Redis     Redis
+	GameTTL   time.Duration
+	WebSocket WebSocket
 }
 
 type QuizGRPC struct {
@@ -29,6 +30,20 @@ type Redis struct {
 	DB       int
 }
 
+type WebSocket struct {
+	MaxMessageBytes     int64
+	HandshakeTimeout    time.Duration
+	CommandTimeout      time.Duration
+	WriteTimeout        time.Duration
+	PingInterval        time.Duration
+	PongTimeout         time.Duration
+	PlayerCommandRate   int
+	PlayerCommandBurst  int
+	HostCommandRate     int
+	HostCommandBurst    int
+	InvalidMessageLimit int
+}
+
 func Load() (Config, error) {
 	db, err := strconv.Atoi(envOrDefault("GAME_REDIS_DB", "0"))
 	if err != nil || db < 0 {
@@ -38,6 +53,10 @@ func Load() (Config, error) {
 	if err != nil || ttl < time.Minute || ttl > 7*24*time.Hour {
 		return Config{}, fmt.Errorf("GAME_TTL must be between 1m and 168h")
 	}
+	websocketConfig, err := loadWebSocket()
+	if err != nil {
+		return Config{}, err
+	}
 	config := Config{
 		HTTPPort: envOrDefault("GAME_HTTP_PORT", "8081"),
 		Quiz: QuizGRPC{
@@ -46,8 +65,9 @@ func Load() (Config, error) {
 			CAFile:       os.Getenv("GAME_QUIZ_GRPC_CA_FILE"), CertFile: os.Getenv("GAME_QUIZ_GRPC_CERT_FILE"),
 			KeyFile: os.Getenv("GAME_QUIZ_GRPC_KEY_FILE"), ServerName: os.Getenv("GAME_QUIZ_GRPC_SERVER_NAME"),
 		},
-		Redis:   Redis{Address: envOrDefault("GAME_REDIS_ADDRESS", "localhost:6379"), Password: os.Getenv("GAME_REDIS_PASSWORD"), DB: db},
-		GameTTL: ttl,
+		Redis:     Redis{Address: envOrDefault("GAME_REDIS_ADDRESS", "localhost:6379"), Password: os.Getenv("GAME_REDIS_PASSWORD"), DB: db},
+		GameTTL:   ttl,
+		WebSocket: websocketConfig,
 	}
 	if err := validatePort("GAME_HTTP_PORT", config.HTTPPort); err != nil {
 		return Config{}, err
@@ -66,6 +86,77 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("quiz gRPC mTLS requires CA, certificate and key")
 	}
 	return config, nil
+}
+
+func loadWebSocket() (WebSocket, error) {
+	maxMessageBytes, err := positiveInt("GAME_WS_MAX_MESSAGE_BYTES", "16384", 1024, 1<<20)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	handshakeTimeout, err := duration("GAME_WS_HANDSHAKE_TIMEOUT", "10s", time.Second, time.Minute)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	commandTimeout, err := duration("GAME_WS_COMMAND_TIMEOUT", "5s", 100*time.Millisecond, time.Minute)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	writeTimeout, err := duration("GAME_WS_WRITE_TIMEOUT", "5s", 100*time.Millisecond, time.Minute)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	pingInterval, err := duration("GAME_WS_PING_INTERVAL", "30s", time.Second, 5*time.Minute)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	pongTimeout, err := duration("GAME_WS_PONG_TIMEOUT", "10s", 100*time.Millisecond, time.Minute)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	playerRate, err := positiveInt("GAME_WS_PLAYER_COMMAND_RATE", "5", 1, 1000)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	playerBurst, err := positiveInt("GAME_WS_PLAYER_COMMAND_BURST", "10", 1, 10000)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	hostRate, err := positiveInt("GAME_WS_HOST_COMMAND_RATE", "10", 1, 1000)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	hostBurst, err := positiveInt("GAME_WS_HOST_COMMAND_BURST", "20", 1, 10000)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	invalidLimit, err := positiveInt("GAME_WS_INVALID_MESSAGE_LIMIT", "5", 1, 100)
+	if err != nil {
+		return WebSocket{}, err
+	}
+	return WebSocket{
+		MaxMessageBytes: int64(maxMessageBytes), HandshakeTimeout: handshakeTimeout,
+		CommandTimeout: commandTimeout, WriteTimeout: writeTimeout,
+		PingInterval: pingInterval, PongTimeout: pongTimeout,
+		PlayerCommandRate: playerRate, PlayerCommandBurst: playerBurst,
+		HostCommandRate: hostRate, HostCommandBurst: hostBurst,
+		InvalidMessageLimit: invalidLimit,
+	}, nil
+}
+
+func positiveInt(name, fallback string, minimum, maximum int) (int, error) {
+	value, err := strconv.Atoi(envOrDefault(name, fallback))
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%s must be between %d and %d", name, minimum, maximum)
+	}
+	return value, nil
+}
+
+func duration(name, fallback string, minimum, maximum time.Duration) (time.Duration, error) {
+	value, err := time.ParseDuration(envOrDefault(name, fallback))
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%s must be between %s and %s", name, minimum, maximum)
+	}
+	return value, nil
 }
 
 func envOrDefault(name, fallback string) string {

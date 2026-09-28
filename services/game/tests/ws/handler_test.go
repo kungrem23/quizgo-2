@@ -381,6 +381,118 @@ func TestWebSocketHeartbeatClosesUnresponsiveConnectionAndAllowsReconnect(t *tes
 	}
 }
 
+func TestWebSocketRoleAwareCommandRateLimits(t *testing.T) {
+	wsURL, created := newWebSocketTestServer(t, websockettransport.Options{
+		PlayerCommandRate: 1, PlayerCommandBurst: 1,
+		HostCommandRate: 1, HostCommandBurst: 2,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	playerConnection, _ := joinPlayer(t, ctx, wsURL, created.Game.Code, "Alice")
+	defer playerConnection.CloseNow()
+	writeClientMessage(t, ctx, playerConnection, "answer", "player-1", map[string]any{"answer_id": 1})
+	waitForError(t, ctx, playerConnection, "player-1", "invalid_phase")
+	writeClientMessage(t, ctx, playerConnection, "answer", "player-2", map[string]any{"answer_id": 1})
+	waitForError(t, ctx, playerConnection, "player-2", "rate_limited")
+
+	hostConnection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hostConnection.CloseNow()
+	writeClientMessage(t, ctx, hostConnection, "host_auth", "host-auth", map[string]any{"game_id": created.Game.ID, "ticket": created.HostTicket})
+	waitForMessage(t, ctx, hostConnection, "authenticated")
+	writeClientMessage(t, ctx, hostConnection, "start", "host-1", nil)
+	assertCommandAck(t, waitForMessage(t, ctx, hostConnection, "command_accepted"), "host-1", false)
+	writeClientMessage(t, ctx, hostConnection, "start", "host-2", nil)
+	waitForError(t, ctx, hostConnection, "host-2", "invalid_phase")
+	writeClientMessage(t, ctx, hostConnection, "finish", "host-3", nil)
+	waitForError(t, ctx, hostConnection, "host-3", "rate_limited")
+}
+
+func TestWebSocketClosesAfterInvalidMessages(t *testing.T) {
+	wsURL, created := newWebSocketTestServer(t, websockettransport.Options{
+		HostCommandRate: 100, HostCommandBurst: 100, InvalidMessageLimit: 3,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.CloseNow()
+	writeClientMessage(t, ctx, connection, "host_auth", "host-auth", map[string]any{"game_id": created.Game.ID, "ticket": created.HostTicket})
+	waitForMessage(t, ctx, connection, "authenticated")
+
+	if err := connection.Write(ctx, websocket.MessageText, []byte(`{"type":`)); err != nil {
+		t.Fatal(err)
+	}
+	waitForError(t, ctx, connection, "", "invalid_payload")
+	writeClientMessage(t, ctx, connection, "not_a_command", "bad-2", nil)
+	waitForError(t, ctx, connection, "bad-2", "unknown_message_type")
+	writeClientMessage(t, ctx, connection, "start", "bad-3", map[string]any{"unexpected": true})
+	waitForError(t, ctx, connection, "bad-3", "invalid_payload")
+
+	var message serverMessage
+	if err := wsjson.Read(ctx, connection, &message); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("invalid message connection closed with %v, want policy violation", err)
+	}
+}
+
+func TestWebSocketRejectsOversizedMessage(t *testing.T) {
+	wsURL, created := newWebSocketTestServer(t, websockettransport.Options{MaxMessageBytes: 256})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	connection, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.CloseNow()
+	writeClientMessage(t, ctx, connection, "host_auth", "host-auth", map[string]any{"game_id": created.Game.ID, "ticket": created.HostTicket})
+	waitForMessage(t, ctx, connection, "authenticated")
+
+	oversized := []byte(`{"type":"start","request_id":"big","payload":{"padding":"` + strings.Repeat("x", 512) + `"}}`)
+	if err := connection.Write(ctx, websocket.MessageText, oversized); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var message serverMessage
+		err := wsjson.Read(ctx, connection, &message)
+		if err == nil {
+			continue
+		}
+		if websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
+			t.Fatalf("oversized message closed with %v, want message too big", err)
+		}
+		return
+	}
+}
+
+func newWebSocketTestServer(t *testing.T, options websockettransport.Options) (string, application.CreatedGame) {
+	t.Helper()
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	service := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour)
+	created, err := service.CreateGame(context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := application.NewHub(repository, time.Hour)
+	server := httptest.NewServer(websockettransport.NewWithOptions(hub, log.New(io.Discard, "", 0), options))
+	t.Cleanup(func() {
+		server.Close()
+		hub.Close()
+	})
+	return "ws" + strings.TrimPrefix(server.URL, "http"), created
+}
+
 func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket.Conn, messageType, requestID string, payload any) {
 	t.Helper()
 	raw := json.RawMessage(nil)
