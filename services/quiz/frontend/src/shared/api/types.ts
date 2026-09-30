@@ -35,3 +35,10 @@ export interface UploadedImage {
   id: string;
   url: string;
 }
+export interface CreatedGame {
+  id: string;
+  code: string;
+  phase: 'lobby';
+  quiz_revision: number;
+  host_ticket: string;
+}

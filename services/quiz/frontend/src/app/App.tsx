@@ -13,6 +13,8 @@ import { AuthProvider, useAuth } from '../features/auth/AuthProvider';
 import { Loading, ToastProvider } from '../shared/ui/ui';
 import { AuthPage } from '../pages/AuthPage';
 import { QuizzesPage } from '../pages/QuizzesPage';
+import { JoinPage } from '../pages/JoinPage';
+import { HostGamePage, PlayerGamePage } from '../pages/GamePage';
 const EditorPage = lazy(() =>
   import('../pages/EditorPage').then((m) => ({ default: m.EditorPage })),
 );
@@ -87,6 +89,10 @@ const router = createBrowserRouter([
       { path: '/', element: <Navigate to="/quizzes" replace /> },
       { path: '/login', element: <AuthPage /> },
       { path: '/register', element: <AuthPage register /> },
+      { path: '/join', element: <JoinPage /> },
+      { path: '/join/:code', element: <JoinPage /> },
+      { path: '/games/:gameId/host', element: <HostGamePage /> },
+      { path: '/games/:gameId/player', element: <PlayerGamePage /> },
       { path: '/quizzes/:quizId', element: <PreviewPage /> },
       {
         element: <Protected />,

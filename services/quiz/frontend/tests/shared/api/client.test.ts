@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { request, setAuthorization } from '../../../src/shared/api/client';
+import { api, request, setAuthorization } from '../../../src/shared/api/client';
 
 afterEach(() => {
   setAuthorization('');
@@ -42,5 +42,24 @@ describe('session-aware API client', () => {
     );
     await expect(request('/api/questions/1')).rejects.toMatchObject({ status });
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('creates a game through the authenticated game-service route', async () => {
+    setAuthorization('test-token');
+    const created = {
+      id: 'game-1',
+      code: 'ABC123',
+      phase: 'lobby' as const,
+      quiz_revision: 3,
+      host_ticket: 'host-secret',
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(created), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(api.createGame(42)).resolves.toEqual(created);
+    const [path, options] = (fetchMock.mock.calls as unknown as [string, RequestInit][])[0];
+    expect(path).toBe('/api/games');
+    expect(options.method).toBe('POST');
+    expect(options.body).toBe('{"quiz_id":42}');
+    expect(new Headers(options.headers).get('Authorization')).toBe('Bearer test-token');
   });
 });

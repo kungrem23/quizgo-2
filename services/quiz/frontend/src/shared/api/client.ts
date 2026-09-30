@@ -1,4 +1,11 @@
-import type { QuizContent, QuizSummary, SaveContent, UploadedImage, User } from './types';
+import type {
+  CreatedGame,
+  QuizContent,
+  QuizSummary,
+  SaveContent,
+  UploadedImage,
+  User,
+} from './types';
 let authorization = '';
 export function setAuthorization(token: string) {
   authorization = token ? `Bearer ${token.replace(/^Bearer\s+/i, '')}` : '';
@@ -77,6 +84,8 @@ export const api = {
     request<QuizSummary[] | null>('/api/me/quizzes', { signal }).then((v) => v ?? []),
   createQuiz: (title: string) =>
     request<{ id: number }>('/api/quizzes', { method: 'POST', body: json({ title }) }),
+  createGame: (quizId: number) =>
+    request<CreatedGame>('/api/games', { method: 'POST', body: json({ quiz_id: quizId }) }),
   quiz: (id: number, author = false, signal?: AbortSignal) =>
     request<QuizContent>(`/api/quizzes/${id}/${author ? 'author' : 'content'}`, { signal }, author),
   user: (id: number) => request<User>(`/api/users/${id}`, {}, false),

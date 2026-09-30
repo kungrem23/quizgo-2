@@ -2972,6 +2972,43 @@ svg {
   }
 }
 
+/* Realtime foundation. Phase-specific game screens build on this shell. */
+.game-foundation-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background: var(--color-canvas);
+}
+
+.game-foundation-card {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 24px;
+  padding: 32px;
+  border: 1px solid #e2dfed;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(33, 27, 61, 0.06);
+}
+
+.game-foundation-card h1,
+.game-foundation-card p {
+  margin: 0;
+}
+
+.game-foundation-form {
+  display: grid;
+  gap: 18px;
+}
+
+.game-foundation-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
 .image-placeholder {
   display: flex;
   min-height: 120px;
