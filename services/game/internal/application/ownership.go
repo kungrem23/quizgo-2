@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
 )
 
 var ErrLeaseLost = errors.New("room ownership lease lost")
@@ -57,6 +59,8 @@ type OwnershipOptions struct {
 	LeaseTTL      time.Duration
 	RenewInterval time.Duration
 	SafetyMargin  time.Duration
+	Logger        *slog.Logger
+	Metrics       *observability.Metrics
 }
 
 func IsNotRoomOwner(err error) (*NotRoomOwnerError, bool) {

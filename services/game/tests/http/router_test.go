@@ -48,3 +48,16 @@ func TestReadinessReportsFailedDependency(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestMetricsEndpoint(t *testing.T) {
+	metrics := http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte("test_metric 1\n"))
+	})
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	response := httptest.NewRecorder()
+	NewWithMetrics(nil, nil, metrics).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "test_metric 1") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}

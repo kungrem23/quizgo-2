@@ -23,6 +23,14 @@ type Dependency struct {
 }
 
 func New(service GameService, realtime http.Handler, dependencies ...Dependency) http.Handler {
+	return newRouter(service, realtime, nil, dependencies...)
+}
+
+func NewWithMetrics(service GameService, realtime, metrics http.Handler, dependencies ...Dependency) http.Handler {
+	return newRouter(service, realtime, metrics, dependencies...)
+}
+
+func newRouter(service GameService, realtime, metrics http.Handler, dependencies ...Dependency) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
@@ -45,6 +53,9 @@ func New(service GameService, realtime http.Handler, dependencies ...Dependency)
 		})
 	} else {
 		mux.Handle("GET /ws", realtime)
+	}
+	if metrics != nil {
+		mux.Handle("GET /metrics", metrics)
 	}
 	return mux
 }

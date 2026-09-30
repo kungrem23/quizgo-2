@@ -2,18 +2,20 @@ package ws
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/kungrem23/quizgo/services/game/internal/application"
 )
 
 const (
-	internalGameHeader  = "X-Quizgo-Room-Id"
-	internalLeaseHeader = "X-Quizgo-Room-Lease"
+	internalGameHeader        = "X-Quizgo-Room-Id"
+	internalLeaseHeader       = "X-Quizgo-Room-Lease"
+	internalCorrelationHeader = "X-Quizgo-Correlation-Id"
 )
 
 type expectedRoom struct {
@@ -28,10 +30,10 @@ type expectedRoomContextKey struct{}
 type RoomRouter struct {
 	hub     *application.Hub
 	handler http.Handler
-	logger  *log.Logger
+	logger  *slog.Logger
 }
 
-func NewRoomRouter(hub *application.Hub, handler http.Handler, logger *log.Logger) *RoomRouter {
+func NewRoomRouter(hub *application.Hub, handler http.Handler, logger *slog.Logger) *RoomRouter {
 	return &RoomRouter{hub: hub, handler: handler, logger: logger}
 }
 
@@ -44,6 +46,7 @@ func (r *RoomRouter) ServeHTTP(writer http.ResponseWriter, request *http.Request
 		r.serveInternal(writer, request, gameID)
 		return
 	}
+	request.Header.Set(internalCorrelationHeader, uuid.NewString())
 
 	gameID := strings.TrimSpace(request.URL.Query().Get("game_id"))
 	code := strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("code")))
@@ -85,6 +88,12 @@ func (r *RoomRouter) serveInternal(writer http.ResponseWriter, request *http.Req
 	}
 	route, err := r.hub.RouteByID(request.Context(), gameID)
 	if err != nil || !route.Local || route.Owner.LeaseID != leaseID {
+		if r.logger != nil {
+			r.logger.WarnContext(request.Context(), "websocket_internal_route_rejected",
+				"component", "websocket_router", "connection_id", request.Header.Get(internalCorrelationHeader),
+				"game_id", gameID, "error", err,
+			)
+		}
 		http.Error(writer, "room owner changed", http.StatusServiceUnavailable)
 		return
 	}
@@ -110,9 +119,18 @@ func (r *RoomRouter) proxyToOwner(writer http.ResponseWriter, request *http.Requ
 		outbound.Header.Set(internalGameHeader, expected.gameID)
 		outbound.Header.Set(internalLeaseHeader, route.Owner.LeaseID)
 	}
-	proxy.ErrorHandler = func(response http.ResponseWriter, _ *http.Request, proxyErr error) {
+	if r.logger != nil {
+		r.logger.DebugContext(request.Context(), "websocket_proxying_to_room_owner",
+			"component", "websocket_router", "connection_id", request.Header.Get(internalCorrelationHeader),
+			"game_id", expected.gameID, "owner_instance_id", route.Owner.InstanceID,
+		)
+	}
+	proxy.ErrorHandler = func(response http.ResponseWriter, failedRequest *http.Request, proxyErr error) {
 		if r.logger != nil {
-			r.logger.Printf("proxy websocket to room owner %s: %v", route.Owner.InstanceID, proxyErr)
+			r.logger.ErrorContext(failedRequest.Context(), "websocket_owner_proxy_failed",
+				"component", "websocket_router", "connection_id", failedRequest.Header.Get(internalCorrelationHeader),
+				"game_id", expected.gameID, "owner_instance_id", route.Owner.InstanceID, "error", proxyErr,
+			)
 		}
 		http.Error(response, "room owner is unavailable", http.StatusServiceUnavailable)
 	}

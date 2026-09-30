@@ -173,6 +173,49 @@ consensus-протокол: при failover Redis без гарантирова�
 не мигрируют между процессами — при падении owner они разрываются, а reconnect
 становится возможен после истечения lease (не более его TTL плюс сетевой retry).
 
+## Observability
+
+`GET /metrics` отдаёт Prometheus/OpenMetrics на том же HTTP-порту, что health и
+WebSocket. В Docker Compose порт game-service уже доступен только на loopback,
+поэтому для локальной проверки достаточно:
+
+```sh
+curl http://127.0.0.1:8081/metrics
+```
+
+При нескольких репликах Prometheus должен scrape каждую реплику отдельно, а
+глобальные значения получаются суммированием. Доступны прикладные метрики:
+
+- `quizgo_game_rooms_active` — локально загруженные комнаты;
+- `quizgo_game_actors_active` — работающие actor-loop;
+- `quizgo_game_websocket_connections_active` — принятые активные WebSocket;
+- `quizgo_game_websocket_reconnects_total{role}` — успешные ticket-based auth/reconnect;
+- `quizgo_game_websocket_commands_total{command,role}` — входящие команды;
+- `quizgo_game_websocket_command_errors_total{command,role,code}` — ошибки команд;
+- `quizgo_game_websocket_command_duration_seconds{command,role}` — histogram latency;
+- `quizgo_game_redis_errors_total{operation}` — ошибки Redis по операции;
+- `quizgo_game_room_recoveries_total{reason}` — восстановления persisted комнаты;
+- `quizgo_game_ownership_takeovers_total` — повторные получения ownership lease.
+
+Labels используют только закрытые наборы значений. `game_id`, `player_id`, ticket,
+join code и `request_id` в labels не попадают. Примеры PromQL:
+
+```promql
+sum(quizgo_game_rooms_active)
+sum by (command, code) (rate(quizgo_game_websocket_command_errors_total[5m]))
+histogram_quantile(0.95, sum by (le, command) (rate(quizgo_game_websocket_command_duration_seconds_bucket[5m])))
+sum by (operation) (rate(quizgo_game_redis_errors_total[5m]))
+increase(quizgo_game_ownership_takeovers_total[15m])
+```
+
+Game-service пишет JSON logs через `log/slog`. События WebSocket содержат
+`connection_id`; после handshake добавляются `game_id`, `participant_id` и `role`,
+а ошибки команд содержат `command`, `request_id` и стабильный `code`. Routing на
+другую реплику сохраняет тот же `connection_id`. Ownership/actor logs содержат
+`game_id`, `instance_id`, `fence`, phase и причину остановки; Redis errors —
+`operation` и error. Это позволяет перейти от всплеска метрики к конкретному
+соединению или комнате в логах без high-cardinality metric labels.
+
 `GET /healthz` проверяет процесс, `GET /readyz` — Redis и gRPC health
 quiz-сервиса. По умолчанию размер входящего WebSocket-сообщения ограничен 16 KiB,
 handshake — 10 секундами, обработка команды и запись сообщения — 5 секундами.

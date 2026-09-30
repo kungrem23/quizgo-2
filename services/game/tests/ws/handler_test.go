@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -15,7 +16,9 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/kungrem23/quizgo/services/game/internal/application"
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
 	websockettransport "github.com/kungrem23/quizgo/services/game/internal/transport/ws"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type catalogStub struct{ snapshot game.QuizSnapshot }
@@ -90,7 +93,7 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	}
 	hub := application.NewHub(repository, time.Hour)
 	defer hub.Close()
-	server := httptest.NewServer(websockettransport.New(hub, log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(websockettransport.New(hub, testLogger()))
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
@@ -171,7 +174,7 @@ func TestWebSocketLobbyLifecycleAndAuthorization(t *testing.T) {
 	}
 	hub := application.NewHub(repository, time.Hour)
 	defer hub.Close()
-	server := httptest.NewServer(websockettransport.New(hub, log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(websockettransport.New(hub, testLogger()))
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -231,7 +234,7 @@ func TestWebSocketReconnectClosesReplacedConnection(t *testing.T) {
 	}
 	hub := application.NewHub(repository, time.Hour)
 	defer hub.Close()
-	server := httptest.NewServer(websockettransport.New(hub, log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(websockettransport.New(hub, testLogger()))
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -297,7 +300,7 @@ func TestWebSocketReconnectAfterRestartReceivesCaughtUpState(t *testing.T) {
 
 	recoveredHub := application.NewHub(repository, time.Hour)
 	defer recoveredHub.Close()
-	server := httptest.NewServer(websockettransport.New(recoveredHub, log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(websockettransport.New(recoveredHub, testLogger()))
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -350,7 +353,7 @@ func TestWebSocketHeartbeatClosesUnresponsiveConnectionAndAllowsReconnect(t *tes
 	}
 	hub := application.NewHub(repository, time.Hour)
 	defer hub.Close()
-	handler := websockettransport.NewWithOptions(hub, log.New(io.Discard, "", 0), websockettransport.Options{
+	handler := websockettransport.NewWithOptions(hub, testLogger(), websockettransport.Options{
 		PingInterval: 20 * time.Millisecond,
 		PongTimeout:  30 * time.Millisecond,
 	})
@@ -469,6 +472,64 @@ func TestWebSocketRejectsOversizedMessage(t *testing.T) {
 	}
 }
 
+func TestWebSocketCommandAndReconnectMetrics(t *testing.T) {
+	snapshot := game.QuizSnapshot{
+		ID: 8, Revision: 2, Title: "Go", OwnerUserID: 42,
+		Questions: []game.Question{{
+			ID: 1, Text: "Q", TimeLimitSeconds: 10,
+			Answers: []game.Answer{{ID: 1, Text: "A", IsCorrect: true}, {ID: 2, Text: "B"}},
+		}},
+	}
+	repository := &repositoryStub{}
+	created, err := application.New(catalogStub{snapshot: snapshot}, repository, time.Hour).CreateGame(
+		context.Background(), application.CreateGameRequest{QuizID: 8, AccessToken: "token"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := prometheus.NewRegistry()
+	metrics := observability.NewMetrics(registry)
+	hub := application.NewHub(repository, time.Hour)
+	server := httptest.NewServer(websockettransport.NewWithOptions(hub, testLogger(), websockettransport.Options{Metrics: metrics}))
+	defer func() {
+		hub.Close()
+		server.Close()
+	}()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connection, joined := joinPlayer(t, ctx, wsURL, created.Game.Code, "Alice")
+	defer connection.CloseNow()
+	writeClientMessage(t, ctx, connection, "answer", "answer-before-start", map[string]any{"answer_id": 1})
+	waitForError(t, ctx, connection, "answer-before-start", "invalid_phase")
+
+	reconnected, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reconnected.CloseNow()
+	writeClientMessage(t, ctx, reconnected, "player_auth", "reconnect", map[string]any{
+		"game_id": created.Game.ID, "participant_id": joined.PlayerID, "ticket": joined.Ticket,
+	})
+	waitForMessage(t, ctx, reconnected, "authenticated")
+	waitForMessage(t, ctx, reconnected, "state")
+
+	response := httptest.NewRecorder()
+	observability.Handler(registry).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	for _, expected := range []string{
+		`quizgo_game_websocket_commands_total{command="answer",role="player"} 1`,
+		`quizgo_game_websocket_command_errors_total{code="invalid_phase",command="answer",role="player"} 1`,
+		`quizgo_game_websocket_command_duration_seconds_count{command="answer",role="player"} 1`,
+		`quizgo_game_websocket_reconnects_total{role="player"} 1`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("metrics do not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
 func newWebSocketTestServer(t *testing.T, options websockettransport.Options) (string, application.CreatedGame) {
 	t.Helper()
 	snapshot := game.QuizSnapshot{
@@ -485,7 +546,7 @@ func newWebSocketTestServer(t *testing.T, options websockettransport.Options) (s
 		t.Fatal(err)
 	}
 	hub := application.NewHub(repository, time.Hour)
-	server := httptest.NewServer(websockettransport.NewWithOptions(hub, log.New(io.Discard, "", 0), options))
+	server := httptest.NewServer(websockettransport.NewWithOptions(hub, testLogger(), options))
 	t.Cleanup(func() {
 		server.Close()
 		hub.Close()
@@ -506,6 +567,10 @@ func writeClientMessage(t *testing.T, ctx context.Context, connection *websocket
 	if err := wsjson.Write(ctx, connection, websockettransport.ClientMessage{Type: messageType, RequestID: requestID, Payload: raw}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func joinPlayer(t *testing.T, ctx context.Context, wsURL, code, nickname string) (*websocket.Conn, joinedPayload) {

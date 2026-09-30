@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
 )
 
 type Role string
@@ -107,6 +109,8 @@ type Hub struct {
 	leaseTTL     time.Duration
 	renewEvery   time.Duration
 	safetyMargin time.Duration
+	logger       *slog.Logger
+	metrics      *observability.Metrics
 	ttl          time.Duration
 	now          func() time.Time
 	newID        func() string
@@ -141,6 +145,8 @@ func NewDistributedHub(repository GameRepository, ownership RoomOwnershipStore, 
 	hub.leaseTTL = options.LeaseTTL
 	hub.renewEvery = options.RenewInterval
 	hub.safetyMargin = options.SafetyMargin
+	hub.logger = options.Logger
+	hub.metrics = options.Metrics
 	return hub
 }
 
@@ -322,6 +328,9 @@ func (h *Hub) roomForID(ctx context.Context, gameID string) (*room, error) {
 	delete(h.starting, gameID)
 	if err == nil && !h.closed {
 		h.rooms[gameID] = created
+		if h.metrics != nil {
+			h.metrics.RoomOpened()
+		}
 		starting.room = created
 	} else if err == nil {
 		err = errors.New("game hub is closed")
@@ -366,8 +375,25 @@ func (h *Hub) prepareRoom(ctx context.Context, gameID string) (*room, error) {
 	created := &room{
 		game: value, repository: h.repository, ownership: h.ownership, lease: lease,
 		leaseTTL: h.leaseTTL, renewEvery: h.renewEvery, safetyMargin: h.safetyMargin,
-		leaseValidUntil: leaseValidUntil, ttl: h.ttl,
+		leaseValidUntil: leaseValidUntil, logger: h.logger, metrics: h.metrics, ttl: h.ttl,
 		requests: make(chan roomRequest, 64), done: make(chan struct{}), subscribers: make(map[string]*Session),
+	}
+	if h.ownership != nil {
+		takeover := lease.Owner.Fence > 1
+		if h.metrics != nil {
+			if takeover {
+				h.metrics.OwnershipTakeover()
+				h.metrics.RoomRecovered("ownership_takeover")
+			} else if value.Phase != game.PhaseLobby || len(value.Players) > 0 {
+				h.metrics.RoomRecovered("persisted_state")
+			}
+		}
+		if h.logger != nil {
+			h.logger.InfoContext(ctx, "room_ownership_acquired",
+				"component", "room", "game_id", gameID, "instance_id", lease.Owner.InstanceID,
+				"fence", lease.Owner.Fence, "takeover", takeover, "phase", value.Phase,
+			)
+		}
 	}
 	created.onStopped = func() { h.removeRoom(gameID, created) }
 	return created, nil
@@ -378,6 +404,9 @@ func (h *Hub) removeRoom(gameID string, stopped *room) {
 	defer h.mu.Unlock()
 	if h.rooms[gameID] == stopped {
 		delete(h.rooms, gameID)
+		if h.metrics != nil {
+			h.metrics.RoomClosed()
+		}
 	}
 }
 
@@ -389,6 +418,8 @@ type room struct {
 	leaseTTL          time.Duration
 	renewEvery        time.Duration
 	safetyMargin      time.Duration
+	logger            *slog.Logger
+	metrics           *observability.Metrics
 	leaseValidUntil   time.Time
 	leaseLost         bool
 	ttl               time.Duration
@@ -443,6 +474,11 @@ func awaitRoomResponse(ctx context.Context, room *room, response <-chan roomResp
 }
 
 func (r *room) run() {
+	if r.metrics != nil {
+		r.metrics.ActorStarted()
+		defer r.metrics.ActorStopped()
+	}
+	stopReason := "shutdown"
 	var timer *time.Timer
 	var renewTicker *time.Ticker
 	var renewC <-chan time.Time
@@ -468,6 +504,9 @@ func (r *room) run() {
 			r.removeSubscriber(id)
 		}
 		r.releaseLease()
+		if r.logger != nil {
+			r.logger.Info("room_actor_stopped", "component", "room", "game_id", r.game.ID, "reason", stopReason, "phase", r.game.Phase)
+		}
 		if r.onStopped != nil {
 			r.onStopped()
 		}
@@ -476,13 +515,16 @@ func (r *room) run() {
 	for {
 		now := time.Now()
 		if !r.ownsLease(now) {
+			stopReason = "lease_deadline_reached"
 			return
 		}
 		if !r.transitionRetryAt.After(now) {
 			if err := r.advanceExpiredTimedPhases(now); err != nil {
 				if errors.Is(err, ErrLeaseLost) {
+					stopReason = "lease_lost"
 					return
 				}
+				r.logTransitionError(err)
 				r.transitionRetryAt = now.Add(500 * time.Millisecond)
 			} else {
 				r.transitionRetryAt = time.Time{}
@@ -521,9 +563,11 @@ func (r *room) run() {
 		case request := <-r.requests:
 			if !r.ownsLease(time.Now()) {
 				r.respond(request, roomResponse{err: ErrLeaseLost})
+				stopReason = "lease_deadline_reached"
 				return
 			}
 			if request.kind == "stop" {
+				stopReason = "shutdown"
 				return
 			}
 			if request.kind == "authenticate" {
@@ -537,14 +581,17 @@ func (r *room) run() {
 			}
 			r.handle(request)
 			if r.leaseLost {
+				stopReason = "lease_lost"
 				return
 			}
 		case <-timerC:
 			now := time.Now()
 			if err := r.advanceExpiredTimedPhases(now); err != nil {
 				if errors.Is(err, ErrLeaseLost) {
+					stopReason = "lease_lost"
 					return
 				}
+				r.logTransitionError(err)
 				r.transitionRetryAt = now.Add(500 * time.Millisecond)
 			} else {
 				r.transitionRetryAt = time.Time{}
@@ -553,12 +600,20 @@ func (r *room) run() {
 			startedAt := time.Now()
 			renewed, err := r.renewLease(startedAt)
 			if err == nil && !renewed {
+				stopReason = "lease_lost"
+				if r.logger != nil {
+					r.logger.Warn("room_ownership_lost", "component", "room", "game_id", r.game.ID, "instance_id", r.lease.Owner.InstanceID, "fence", r.lease.Owner.Fence)
+				}
 				return
+			}
+			if err != nil && r.logger != nil {
+				r.logger.Warn("room_lease_renew_failed", "component", "room", "game_id", r.game.ID, "instance_id", r.lease.Owner.InstanceID, "fence", r.lease.Owner.Fence, "error", err)
 			}
 			if err == nil {
 				resetTimer(leaseTimer, time.Until(r.leaseValidUntil))
 			}
 		case <-leaseExpiryC:
+			stopReason = "lease_deadline_reached"
 			return
 		}
 	}
@@ -589,7 +644,15 @@ func (r *room) releaseLease() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = r.ownership.ReleaseRoom(ctx, r.lease)
+	if err := r.ownership.ReleaseRoom(ctx, r.lease); err != nil && r.logger != nil {
+		r.logger.Warn("room_lease_release_failed", "component", "room", "game_id", r.game.ID, "instance_id", r.lease.Owner.InstanceID, "fence", r.lease.Owner.Fence, "error", err)
+	}
+}
+
+func (r *room) logTransitionError(err error) {
+	if r.logger != nil {
+		r.logger.Warn("room_timed_transition_failed", "component", "room", "game_id", r.game.ID, "phase", r.game.Phase, "error", err)
+	}
 }
 
 func resetTimer(timer *time.Timer, delay time.Duration) {
@@ -883,6 +946,9 @@ func (r *room) persist(candidate game.Game) error {
 	err := r.ownership.UpdateOwned(ctx, candidate, r.ttl, r.lease)
 	if errors.Is(err, ErrLeaseLost) {
 		r.leaseLost = true
+		if r.logger != nil {
+			r.logger.Warn("room_write_rejected_stale_owner", "component", "room", "game_id", r.game.ID, "instance_id", r.lease.Owner.InstanceID, "fence", r.lease.Owner.Fence)
+		}
 	}
 	return err
 }

@@ -2,8 +2,6 @@ package ws_test
 
 import (
 	"context"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -226,8 +224,8 @@ func newDistributedWebSocketServer(t *testing.T, repository distributedRoomRepos
 		InstanceID: instanceID, InternalURL: internalURL,
 		LeaseTTL: 2 * time.Second, RenewInterval: 200 * time.Millisecond, SafetyMargin: 50 * time.Millisecond,
 	})
-	handler := websockettransport.New(hub, log.New(io.Discard, "", 0))
-	realtime = websockettransport.NewRoomRouter(hub, handler, log.New(io.Discard, "", 0))
+	handler := websockettransport.New(hub, testLogger())
+	realtime = websockettransport.NewRoomRouter(hub, handler, testLogger())
 	server.Start()
 	return hub, server
 }

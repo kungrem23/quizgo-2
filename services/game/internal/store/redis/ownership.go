@@ -73,13 +73,17 @@ func (s *Store) AcquireRoom(ctx context.Context, gameID string, candidate applic
 		strconv.FormatInt(leaseTTL.Milliseconds(), 10), strconv.FormatInt(metadataTTL.Milliseconds(), 10),
 	).Slice()
 	if err != nil {
+		s.observeRedisError(ctx, "acquire_room", err, "game_id", gameID)
 		return application.RoomLease{}, false, err
 	}
 	if len(result) == 0 {
-		return application.RoomLease{}, false, errors.New("redis returned an empty room ownership result")
+		err := errors.New("redis returned an empty room ownership result")
+		s.observeRedisResultError(ctx, "acquire_room", err)
+		return application.RoomLease{}, false, err
 	}
 	status, err := redisInt64(result[0])
 	if err != nil {
+		s.observeRedisResultError(ctx, "acquire_room", err)
 		return application.RoomLease{}, false, err
 	}
 	if status == -1 {
@@ -87,6 +91,7 @@ func (s *Store) AcquireRoom(ctx context.Context, gameID string, candidate applic
 	}
 	owner, _, err := decodeOwnerResult(result)
 	if err != nil {
+		s.observeRedisResultError(ctx, "acquire_room", err)
 		return application.RoomLease{}, false, err
 	}
 	return application.RoomLease{GameID: gameID, Owner: owner}, status == 1, nil
@@ -95,19 +100,27 @@ func (s *Store) AcquireRoom(ctx context.Context, gameID string, candidate applic
 func (s *Store) LookupRoomOwner(ctx context.Context, gameID string) (application.RoomOwner, time.Duration, error) {
 	result, err := lookupRoomOwner.Run(ctx, s.client, []string{ownerKey(gameID)}).Slice()
 	if err != nil {
+		s.observeRedisError(ctx, "lookup_room_owner", err, "game_id", gameID)
 		return application.RoomOwner{}, 0, err
 	}
 	if len(result) == 0 {
-		return application.RoomOwner{}, 0, errors.New("redis returned an empty room owner lookup")
+		err := errors.New("redis returned an empty room owner lookup")
+		s.observeRedisResultError(ctx, "lookup_room_owner", err)
+		return application.RoomOwner{}, 0, err
 	}
 	found, err := redisInt64(result[0])
 	if err != nil {
+		s.observeRedisResultError(ctx, "lookup_room_owner", err)
 		return application.RoomOwner{}, 0, err
 	}
 	if found == 0 {
 		return application.RoomOwner{}, 0, nil
 	}
-	return decodeOwnerResult(result)
+	owner, ttl, err := decodeOwnerResult(result)
+	if err != nil {
+		s.observeRedisResultError(ctx, "lookup_room_owner", err)
+	}
+	return owner, ttl, err
 }
 
 func (s *Store) RenewRoom(ctx context.Context, lease application.RoomLease, leaseTTL, metadataTTL time.Duration) (bool, error) {
@@ -116,6 +129,7 @@ func (s *Store) RenewRoom(ctx context.Context, lease application.RoomLease, leas
 		lease.Owner.LeaseID, strconv.FormatUint(lease.Owner.Fence, 10),
 		strconv.FormatInt(leaseTTL.Milliseconds(), 10), strconv.FormatInt(metadataTTL.Milliseconds(), 10),
 	).Int()
+	s.observeRedisError(ctx, "renew_room", err, "game_id", lease.GameID)
 	return result == 1, err
 }
 
@@ -123,6 +137,7 @@ func (s *Store) ReleaseRoom(ctx context.Context, lease application.RoomLease) er
 	_, err := releaseRoom.Run(ctx, s.client, []string{ownerKey(lease.GameID)},
 		lease.Owner.LeaseID, strconv.FormatUint(lease.Owner.Fence, 10),
 	).Int()
+	s.observeRedisError(ctx, "release_room", err, "game_id", lease.GameID)
 	return err
 }
 
@@ -137,6 +152,7 @@ func (s *Store) UpdateOwned(ctx context.Context, value game.Game, ttl time.Durat
 		strconv.FormatInt(ttl.Milliseconds(), 10), value.ID,
 	).Int()
 	if err != nil {
+		s.observeRedisError(ctx, "update_owned", err, "game_id", value.ID)
 		return err
 	}
 	switch result {

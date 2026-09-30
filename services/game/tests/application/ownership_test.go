@@ -3,12 +3,17 @@ package application_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	. "github.com/kungrem23/quizgo/services/game/internal/application"
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ownershipRepositoryStub struct {
@@ -208,6 +213,49 @@ func TestDistributedHubRestoresTimerAfterOwnerLeaseExpires(t *testing.T) {
 	opened := waitForEvent(t, hostB.Events, "question_opened", 4*time.Second)
 	if opened.Payload.(StateView).Phase != game.PhaseQuestionOpen {
 		t.Fatalf("timer did not recover: %#v", opened.Payload)
+	}
+}
+
+func TestDistributedHubReportsActorAndTakeoverMetrics(t *testing.T) {
+	repository := newOwnershipRepositoryStub()
+	created := createOwnershipTestGame(t, repository, 10)
+	registry := prometheus.NewRegistry()
+	metrics := observability.NewMetrics(registry)
+	optionsA := distributedOptions("replica-a")
+	optionsA.Metrics = metrics
+	hubA := NewDistributedHub(repository, repository, time.Hour, optionsA)
+	hostA, err := hubA.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForEvent(t, hostA.Events, "state", time.Second)
+	assertMetricContains(t, registry, "quizgo_game_rooms_active 1", "quizgo_game_actors_active 1")
+	hubA.Close()
+	assertMetricContains(t, registry, "quizgo_game_rooms_active 0", "quizgo_game_actors_active 0")
+
+	optionsB := distributedOptions("replica-b")
+	optionsB.Metrics = metrics
+	hubB := NewDistributedHub(repository, repository, time.Hour, optionsB)
+	hostB, err := hubB.AuthenticateHost(context.Background(), created.Game.ID, created.HostTicket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForEvent(t, hostB.Events, "state", time.Second)
+	assertMetricContains(t, registry,
+		"quizgo_game_ownership_takeovers_total 1",
+		`quizgo_game_room_recoveries_total{reason="ownership_takeover"} 1`,
+	)
+	hubB.Close()
+}
+
+func assertMetricContains(t *testing.T, registry *prometheus.Registry, expected ...string) {
+	t.Helper()
+	response := httptest.NewRecorder()
+	observability.Handler(registry).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	for _, value := range expected {
+		if !strings.Contains(response.Body.String(), value) {
+			t.Fatalf("metrics do not contain %q:\n%s", value, response.Body.String())
+		}
 	}
 }
 

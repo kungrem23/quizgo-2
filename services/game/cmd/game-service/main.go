@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +14,7 @@ import (
 	"github.com/kungrem23/quizgo/services/game/internal/application"
 	"github.com/kungrem23/quizgo/services/game/internal/client/quizgrpc"
 	"github.com/kungrem23/quizgo/services/game/internal/config"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
 	redisstore "github.com/kungrem23/quizgo/services/game/internal/store/redis"
 	httptransport "github.com/kungrem23/quizgo/services/game/internal/transport/http"
 	websockettransport "github.com/kungrem23/quizgo/services/game/internal/transport/ws"
@@ -21,12 +22,15 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+	if err := run(logger); err != nil {
+		logger.Error("game_service_failed", "component", "main", "error", err)
+		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(logger *slog.Logger) error {
 	settings, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -40,22 +44,24 @@ func run() error {
 	}
 	defer quizConnection.Close()
 	if settings.Quiz.CAFile == "" {
-		log.Print("warning: quiz gRPC transport is plaintext; configure mTLS outside a trusted development network")
+		logger.Warn("quiz_grpc_plaintext", "component", "quiz_grpc", "address", settings.Quiz.Address)
 	}
 
+	registry, metrics := observability.NewRegistry()
 	games := redisstore.New(redisstore.Config{
 		Address: settings.Redis.Address, Password: settings.Redis.Password, DB: settings.Redis.DB,
+		Logger: logger, Metrics: metrics,
 	})
 	defer games.Close()
 	gameService := application.New(quizgrpc.New(quizConnection, settings.Quiz.ServiceToken), games, settings.GameTTL)
 	hub := application.NewDistributedHub(games, games, settings.GameTTL, application.OwnershipOptions{
 		InstanceID: settings.Ownership.InstanceID, InternalURL: settings.Ownership.InternalURL,
 		LeaseTTL: settings.Ownership.LeaseTTL, RenewInterval: settings.Ownership.RenewInterval,
-		SafetyMargin: settings.Ownership.SafetyMargin,
+		SafetyMargin: settings.Ownership.SafetyMargin, Logger: logger, Metrics: metrics,
 	})
 	defer hub.Close()
 	healthClient := grpc_health_v1.NewHealthClient(quizConnection)
-	websocketHandler := websockettransport.NewWithOptions(hub, log.Default(), websockettransport.Options{
+	websocketHandler := websockettransport.NewWithOptions(hub, logger, websockettransport.Options{
 		MaxMessageBytes:     settings.WebSocket.MaxMessageBytes,
 		HandshakeTimeout:    settings.WebSocket.HandshakeTimeout,
 		CommandTimeout:      settings.WebSocket.CommandTimeout,
@@ -67,9 +73,10 @@ func run() error {
 		HostCommandRate:     settings.WebSocket.HostCommandRate,
 		HostCommandBurst:    settings.WebSocket.HostCommandBurst,
 		InvalidMessageLimit: settings.WebSocket.InvalidMessageLimit,
+		Metrics:             metrics,
 	})
-	realtimeRouter := websockettransport.NewRoomRouter(hub, websocketHandler, log.Default())
-	router := httptransport.New(gameService, realtimeRouter,
+	realtimeRouter := websockettransport.NewRoomRouter(hub, websocketHandler, logger)
+	router := httptransport.NewWithMetrics(gameService, realtimeRouter, observability.Handler(registry),
 		httptransport.Dependency{Name: "redis", Check: withTimeout(games.Ping)},
 		httptransport.Dependency{Name: "quiz", Check: withTimeout(func(ctx context.Context) error {
 			response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "quiz.v1.QuizCatalogService"})
@@ -90,7 +97,11 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("game HTTP service started on %s", server.Addr)
+		logger.Info("game_service_started",
+			"component", "main", "address", server.Addr, "instance_id", settings.Ownership.InstanceID,
+			"internal_url", settings.Ownership.InternalURL, "lease_ttl", settings.Ownership.LeaseTTL,
+			"lease_renew_interval", settings.Ownership.RenewInterval,
+		)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("serve game HTTP: %w", err)
 		}
@@ -101,7 +112,7 @@ func run() error {
 	var serveErr error
 	select {
 	case <-signalCtx.Done():
-		log.Print("shutting down game service")
+		logger.Info("game_service_shutdown_started", "component", "main", "reason", signalCtx.Err())
 	case serveErr = <-errCh:
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

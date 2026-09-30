@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,8 +15,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/google/uuid"
 	"github.com/kungrem23/quizgo/services/game/internal/application"
 	game "github.com/kungrem23/quizgo/services/game/internal/domain"
+	"github.com/kungrem23/quizgo/services/game/internal/observability"
 )
 
 const (
@@ -41,7 +43,8 @@ var (
 
 type Handler struct {
 	hub                 *application.Hub
-	logger              *log.Logger
+	logger              *slog.Logger
+	metrics             *observability.Metrics
 	maxMessageBytes     int64
 	handshakeTimeout    time.Duration
 	commandTimeout      time.Duration
@@ -69,14 +72,15 @@ type Options struct {
 	HostCommandRate     int
 	HostCommandBurst    int
 	InvalidMessageLimit int
+	Metrics             *observability.Metrics
 }
 
-func New(hub *application.Hub, logger *log.Logger) *Handler {
+func New(hub *application.Hub, logger *slog.Logger) *Handler {
 	return NewWithOptions(hub, logger, Options{})
 }
 
 // NewWithOptions creates a handler with custom WebSocket safety limits.
-func NewWithOptions(hub *application.Hub, logger *log.Logger, options Options) *Handler {
+func NewWithOptions(hub *application.Hub, logger *slog.Logger, options Options) *Handler {
 	if options.MaxMessageBytes <= 0 {
 		options.MaxMessageBytes = defaultMaxMessageBytes
 	}
@@ -111,7 +115,7 @@ func NewWithOptions(hub *application.Hub, logger *log.Logger, options Options) *
 		options.InvalidMessageLimit = defaultInvalidMessageLimit
 	}
 	return &Handler{
-		hub: hub, logger: logger,
+		hub: hub, logger: logger, metrics: options.Metrics,
 		maxMessageBytes:  options.MaxMessageBytes,
 		handshakeTimeout: options.HandshakeTimeout,
 		commandTimeout:   options.CommandTimeout,
@@ -128,9 +132,22 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, "realtime service unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	connectionID := websocketConnectionID(request)
+	connectionLogger := h.logger
+	if connectionLogger != nil {
+		connectionLogger = connectionLogger.With("component", "websocket", "connection_id", connectionID)
+	}
 	connection, err := websocket.Accept(writer, request, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
 	if err != nil {
+		if connectionLogger != nil {
+			connectionLogger.WarnContext(request.Context(), "websocket_accept_failed", "error", err)
+		}
 		return
+	}
+	connectedAt := time.Now()
+	if h.metrics != nil {
+		h.metrics.WebSocketOpened()
+		defer h.metrics.WebSocketClosed()
 	}
 	connection.SetReadLimit(h.maxMessageBytes)
 	ctx, cancel := context.WithCancel(request.Context())
@@ -138,6 +155,13 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 	session, err := h.handshake(ctx, connection)
 	if err != nil {
+		if connectionLogger != nil {
+			level := slog.LevelWarn
+			if wsErrorCode(err) == "internal_error" {
+				level = slog.LevelError
+			}
+			connectionLogger.Log(ctx, level, "websocket_handshake_failed", "code", wsErrorCode(err), "error", err)
+		}
 		h.writeError(ctx, connection, "", err)
 		status := websocket.StatusPolicyViolation
 		reason := "handshake failed"
@@ -147,6 +171,15 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		}
 		_ = connection.Close(status, reason)
 		return
+	}
+	if connectionLogger != nil {
+		connectionLogger = connectionLogger.With(
+			"game_id", session.GameID, "participant_id", session.ParticipantID, "role", session.Role,
+		)
+		connectionLogger.InfoContext(ctx, "websocket_connected")
+		defer func() {
+			connectionLogger.Info("websocket_disconnected", "duration_ms", time.Since(connectedAt).Milliseconds())
+		}()
 	}
 
 	var workers sync.WaitGroup
@@ -208,25 +241,41 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			if !isClientViolation(err) {
 				return
 			}
+			h.observeCommandError(ctx, connectionLogger, session, message, err)
 			if h.rejectClientMessage(ctx, connection, guard, message.RequestID, err) {
 				return
 			}
 			continue
 		}
+		if h.metrics != nil {
+			h.metrics.WebSocketCommand(message.Type, string(session.Role))
+		}
 		if !guard.allow(time.Now()) {
+			h.observeCommandError(ctx, connectionLogger, session, message, errRateLimited)
 			if h.rejectClientMessage(ctx, connection, guard, message.RequestID, errRateLimited) {
 				return
 			}
 			continue
 		}
+		startedAt := time.Now()
 		commandCtx, commandCancel := context.WithTimeout(ctx, h.commandTimeout)
 		result, err := h.dispatch(commandCtx, session, message)
 		commandCancel()
+		if h.metrics != nil {
+			h.metrics.ObserveWebSocketCommand(message.Type, string(session.Role), time.Since(startedAt))
+		}
 		if err != nil {
+			h.observeCommandError(ctx, connectionLogger, session, message, err)
 			if h.rejectClientMessage(ctx, connection, guard, message.RequestID, err) {
 				return
 			}
 			continue
+		}
+		if connectionLogger != nil {
+			connectionLogger.DebugContext(ctx, "websocket_command_accepted",
+				"command", message.Type, "request_id", message.RequestID, "duplicate", result.Duplicate,
+				"duration_ms", time.Since(startedAt).Milliseconds(),
+			)
 		}
 		if err := h.writeMessage(ctx, connection, ServerMessage{Type: "command_accepted", RequestID: message.RequestID, Payload: map[string]bool{"duplicate": result.Duplicate}}); err != nil {
 			return
@@ -299,6 +348,9 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 			h.hub.Disconnect(session)
 			return nil, err
 		}
+		if h.metrics != nil {
+			h.metrics.WebSocketReconnect(string(application.RoleHost))
+		}
 		return session, nil
 	case "player_auth":
 		var payload struct {
@@ -322,6 +374,9 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 		if err := h.writeAuthenticated(ctx, connection, message.RequestID, session); err != nil {
 			h.hub.Disconnect(session)
 			return nil, err
+		}
+		if h.metrics != nil {
+			h.metrics.WebSocketReconnect(string(application.RolePlayer))
 		}
 		return session, nil
 	default:
@@ -381,7 +436,27 @@ func (h *Handler) rejectClientMessage(ctx context.Context, connection *websocket
 	return true
 }
 
-func (h *Handler) writeError(ctx context.Context, connection *websocket.Conn, requestID string, err error) {
+func (h *Handler) observeCommandError(ctx context.Context, logger *slog.Logger, session *application.Session, message ClientMessage, err error) {
+	code := wsErrorCode(err)
+	role := "unknown"
+	if session != nil {
+		role = string(session.Role)
+	}
+	if h.metrics != nil {
+		h.metrics.WebSocketCommandError(message.Type, role, code)
+	}
+	if logger != nil {
+		level := slog.LevelWarn
+		if code == "internal_error" {
+			level = slog.LevelError
+		}
+		logger.Log(ctx, level, "websocket_command_rejected",
+			"command", message.Type, "request_id", message.RequestID, "code", code, "error", err,
+		)
+	}
+}
+
+func wsErrorCode(err error) string {
 	code := "internal_error"
 	switch {
 	case errors.Is(err, game.ErrUnauthorized):
@@ -411,10 +486,23 @@ func (h *Handler) writeError(ctx context.Context, connection *websocket.Conn, re
 			code = "room_not_local"
 		}
 	}
-	if code == "internal_error" && h.logger != nil {
-		h.logger.Printf("websocket command failed: %v", err)
-	}
+	return code
+}
+
+func (h *Handler) writeError(ctx context.Context, connection *websocket.Conn, requestID string, err error) {
+	code := wsErrorCode(err)
 	_ = h.writeMessage(ctx, connection, ServerMessage{Type: "error", RequestID: requestID, Payload: map[string]string{"code": code}})
+}
+
+func websocketConnectionID(request *http.Request) string {
+	if request != nil {
+		if value := request.Header.Get(internalCorrelationHeader); value != "" {
+			if _, err := uuid.Parse(value); err == nil {
+				return value
+			}
+		}
+	}
+	return uuid.NewString()
 }
 
 func decodePayload(raw json.RawMessage, target any) error {
