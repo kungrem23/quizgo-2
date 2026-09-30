@@ -131,6 +131,7 @@ export function JoinPage() {
               maxLength={30}
               placeholder="Как вас зовут?"
               disabled={busy}
+              className="join-nickname-input"
             />
           </label>
           <p className="join-game-hint">

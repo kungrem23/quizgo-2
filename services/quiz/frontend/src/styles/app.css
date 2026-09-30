@@ -3036,6 +3036,10 @@ svg {
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
+.join-nickname-input {
+  /* iOS Safari zooms focused form controls whose text is smaller than 16px. */
+  font-size: 16px;
+}
 .join-nickname-label {
   display: flex;
   justify-content: space-between;
