@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .m-shadow { filter: drop-shadow(0 4px 14px rgba(33, 27, 61, 0.07)); }
+      .btn-m-shadow { filter: drop-shadow(0 4px 10px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <!-- Фоновая заливка -->
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <!-- ================= СТАТУС-БАР И ТАЙМЕР (ВВЕРХУ) ================= -->
+  <!-- Динамический прогресс-бар оставшегося времени (18 сек из 30 = 60%) -->
+  <rect x="0" y="0" width="390" height="6" fill="#E2DFED"/>
+  <rect x="0" y="0" width="234" height="6" fill="#7047EB"/>
+
+  <!-- Мобильный хедер -->
+  <g transform="translate(20, 24)">
+    <text x="0" y="18" class="semi" font-size="13" fill="#858198">Вопрос 3 из 10</text>
+    
+    <!-- Бейдж обратного отсчета -->
+    <rect x="278" y="0" width="72" height="28" rx="14" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    <circle cx="292" cy="14" r="4" fill="#7047EB"/>
+    <text x="323" y="19" class="bold tnum" font-size="14" fill="#211B3D" text-anchor="middle">18 с</text>
+  </g>
+
+  <!-- ================= КАРТОЧКА ВОПРОСА ================= -->
+  <g class="m-shadow" transform="translate(16, 68)">
+    <rect width="358" height="216" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Текст вопроса (крупный, оптимизированный под чтение с ладони) -->
+    <text x="20" y="38" class="bold" font-size="19" fill="#211B3D" letter-spacing="-0.2">
+      <tspan x="20" dy="0">Какое явление доказало</tspan>
+      <tspan x="20" dy="26">квантовую природу света?</tspan>
+    </text>
+
+    <!-- Компактная иллюстрация внутри вопроса -->
+    <rect x="20" y="86" width="318" height="110" rx="10" fill="#F0EDFB"/>
+    <!-- Векторная миниатюра опыта -->
+    <circle cx="159" cy="141" r="24" fill="#FFFFFF"/>
+    <path d="M120 125 L145 137" stroke="#7047EB" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M120 141 L142 141" stroke="#7047EB" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M124 157 L145 145" stroke="#7047EB" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="170" cy="134" r="4" fill="#E5484D"/>
+    <circle cx="178" cy="148" r="4" fill="#E5484D"/>
+    <text x="245" y="146" class="medium" font-size="12" fill="#7047EB">Схема опыта</text>
+  </g>
+
+  <!-- Микро-подсказка перед зоной нажатий -->
+  <text x="195" y="306" class="medium" font-size="12" fill="#858198" text-anchor="middle">
+    Выберите один вариант (изменить нельзя)
+  </text>
+
+  <!-- ================= СЕТКА КНОПОК ОТВЕТОВ (ЗОНА БОЛЬШОГО ПАЛЬЦА) ================= -->
+  <!-- Кнопка 1: ▲ Красный (Фотоэффект) -->
+  <g class="btn-m-shadow" transform="translate(16, 324)">
+    <rect width="358" height="102" rx="16" fill="#E5484D"/>
+    <!-- Белая полупрозрачная плашка под символ -->
+    <rect x="18" y="23" width="56" height="56" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="46" y="60" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">▲</text>
+    
+    <text x="88" y="47" class="bold" font-size="18" fill="#FFFFFF">Фотоэффект</text>
+    <text x="88" y="70" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Выбивание электронов светом</text>
+  </g>
+
+  <!-- Кнопка 2: ◆ Синий (Интерференция) -->
+  <g class="btn-m-shadow" transform="translate(16, 440)">
+    <rect width="358" height="102" rx="16" fill="#2F68EE"/>
+    <rect x="18" y="23" width="56" height="56" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="46" y="60" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">◆</text>
+    
+    <text x="88" y="47" class="bold" font-size="18" fill="#FFFFFF">Интерференция</text>
+    <text x="88" y="70" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Опыт Юнга с двумя щелями</text>
+  </g>
+
+  <!-- Кнопка 3: ● Янтарный (Дифракция) -->
+  <g class="btn-m-shadow" transform="translate(16, 556)">
+    <rect width="358" height="102" rx="16" fill="#D97706"/>
+    <rect x="18" y="23" width="56" height="56" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="46" y="60" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">●</text>
+    
+    <text x="88" y="47" class="bold" font-size="18" fill="#FFFFFF">Дифракция</text>
+    <text x="88" y="70" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Огибание светом преград</text>
+  </g>
+
+  <!-- Кнопка 4: ■ Зелёный (Дисперсия) -->
+  <g class="btn-m-shadow" transform="translate(16, 672)">
+    <rect width="358" height="102" rx="16" fill="#16A34A"/>
+    <rect x="18" y="23" width="56" height="56" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="46" y="60" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">■</text>
+    
+    <text x="88" y="47" class="bold" font-size="18" fill="#FFFFFF">Дисперсия</text>
+    <text x="88" y="70" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Разложение в спектр призмой</text>
+  </g>
+
+  <!-- ================= СИСТЕМНАЯ ЗОНА (iOS HOME INDICATOR) ================= -->
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

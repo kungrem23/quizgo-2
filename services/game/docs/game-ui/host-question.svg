@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 810" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .card-shadow { filter: drop-shadow(0 4px 20px rgba(33, 27, 61, 0.06)); }
+      .timer-shadow { filter: drop-shadow(0 6px 16px rgba(112, 71, 235, 0.15)); }
+      .btn-shadow { filter: drop-shadow(0 4px 14px rgba(33, 27, 61, 0.08)); }
+    </style>
+    
+    <!-- Фоновый градиент карточки с изображением -->
+    <linearGradient id="mediaGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F0EDFB"/>
+      <stop offset="100%" stop-color="#E2DFED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Фон приложения -->
+  <rect width="1440" height="810" fill="#F7F7FC"/>
+
+  <!-- Декоративные полупрозрачные фирменные орбиты QuizGo -->
+  <circle cx="1350" cy="90" r="180" fill="none" stroke="#E2DFED" stroke-width="2" opacity="0.6"/>
+  <circle cx="100" cy="740" r="140" fill="none" stroke="#E2DFED" stroke-width="1.5" stroke-dasharray="6 6" opacity="0.7"/>
+
+  <!-- ================= ВЕРХНЯЯ ПАНЕЛЬ (HEADER) ================= -->
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  
+  <!-- Логотип QuizGo -->
+  <text x="48" y="44" class="bold" font-size="24" fill="#7047EB" letter-spacing="-0.5">QuizGo</text>
+  
+  <!-- Бейдж номера вопроса -->
+  <rect x="160" y="20" width="136" height="32" rx="16" fill="#F0EDFB"/>
+  <text x="228" y="41" class="semi" font-size="14" fill="#7047EB" text-anchor="middle">Вопрос 3 из 10</text>
+
+  <!-- Название активного квиза -->
+  <text x="320" y="42" class="medium" font-size="15" fill="#858198">Квантовая физика для начинающих</text>
+
+  <!-- Статус сетевого соединения -->
+  <g transform="translate(1090, 26)">
+    <rect width="124" height="28" rx="14" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <circle cx="16" cy="14" r="4.5" fill="#16A34A"/>
+    <text x="28" y="19" class="medium" font-size="13" fill="#211B3D">В сети: 24/24</text>
+  </g>
+
+  <!-- Кнопка досрочного закрытия вопроса -->
+  <g transform="translate(1234, 16)">
+    <rect width="158" height="40" rx="10" fill="#FFEBEB" stroke="#E84D66" stroke-width="1"/>
+    <text x="79" y="25" class="semi" font-size="14" fill="#E84D66" text-anchor="middle">Закрыть вопрос</text>
+  </g>
+
+  <!-- ================= СРЕДНЯЯ ЗОНА: ВОПРОС, ИЛЛЮСТРАЦИЯ, ТАЙМЕР ================= -->
+  
+  <!-- Круговой таймер по центру над карточкой вопроса -->
+  <g class="timer-shadow" transform="translate(720, 102)">
+    <circle cx="0" cy="0" r="44" fill="#FFFFFF" stroke="#E2DFED" stroke-width="7"/>
+    <!-- Дуга обратного отсчета: периметр 2*pi*44 = 276.4; 18с из 30с = 60% осталось -> dashoffset ~110 -->
+    <circle cx="0" cy="0" r="44" fill="none" stroke="#7047EB" stroke-width="7" 
+            stroke-dasharray="276" stroke-dashoffset="110" stroke-linecap="round" 
+            transform="rotate(-90 0 0)"/>
+    <text x="0" y="8" class="bold tnum" font-size="26" fill="#211B3D" text-anchor="middle">18</text>
+    <text x="0" y="22" class="regular" font-size="10" fill="#858198" text-anchor="middle">сек</text>
+  </g>
+
+  <!-- Карточка вопроса с медиа-блоком (2 колонки) -->
+  <g class="card-shadow" transform="translate(80, 160)">
+    <rect width="1280" height="210" rx="18" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Левая колонка: Иллюстрация к вопросу -->
+    <rect x="24" y="20" width="230" height="170" rx="12" fill="url(#mediaGradient)"/>
+    <!-- Стилизованная пиктограмма фотоэффекта / излучения -->
+    <circle cx="139" cy="105" r="32" fill="#FFFFFF" opacity="0.9"/>
+    <path d="M100 80 L125 98" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+    <path d="M102 105 L122 105" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+    <path d="M108 128 L127 114" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="152" cy="95" r="5" fill="#E5484D"/>
+    <circle cx="160" cy="115" r="5" fill="#E5484D"/>
+    <text x="139" y="165" class="medium" font-size="11" fill="#7047EB" text-anchor="middle">Иллюстрация к вопросу</text>
+
+    <!-- Правая колонка: Текст вопроса и шкала ответивших -->
+    <text x="284" y="82" class="bold" font-size="32" fill="#211B3D" letter-spacing="-0.3">
+      Какое физическое явление окончательно доказало
+    </text>
+    <text x="284" y="124" class="bold" font-size="32" fill="#211B3D" letter-spacing="-0.3">
+      квантовую природу электромагнитного излучения?
+    </text>
+
+    <!-- Индикатор прогресса сбора ответов -->
+    <g transform="translate(284, 154)">
+      <text x="0" y="14" class="semi" font-size="14" fill="#211B3D">
+        Ответили: <tspan class="bold tnum" fill="#7047EB">18</tspan> из 24 игроков
+      </text>
+      <rect x="180" y="3" width="780" height="12" rx="6" fill="#F0EDFB"/>
+      <!-- Прогресс 75% (18/24) -->
+      <rect x="180" y="3" width="585" height="12" rx="6" fill="#7047EB"/>
+    </g>
+  </g>
+
+  <!-- ================= СЕТКА ВАРИАНТОВ ОТВЕТА (2x2) ================= -->
+  <!-- Вариант 1 (▲ Красный / Коралловый) -->
+  <g class="btn-shadow" transform="translate(80, 395)">
+    <rect width="625" height="180" rx="16" fill="#E5484D"/>
+    <rect x="24" y="24" width="52" height="52" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="50" y="60" class="bold" font-size="32" fill="#FFFFFF" text-anchor="middle">▲</text>
+    <text x="96" y="58" class="bold" font-size="26" fill="#FFFFFF">Фотоэлектрический эффект</text>
+    <text x="96" y="100" class="regular" font-size="16" fill="#FFFFFF" fill-opacity="0.85">
+      Выбивание электронов светом с поверхности металла
+    </text>
+  </g>
+
+  <!-- Вариант 2 (◆ Сапфирово-синий) -->
+  <g class="btn-shadow" transform="translate(735, 395)">
+    <rect width="625" height="180" rx="16" fill="#2F68EE"/>
+    <rect x="24" y="24" width="52" height="52" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="50" y="60" class="bold" font-size="32" fill="#FFFFFF" text-anchor="middle">◆</text>
+    <text x="96" y="58" class="bold" font-size="26" fill="#FFFFFF">Интерференция на двух щелях</text>
+    <text x="96" y="100" class="regular" font-size="16" fill="#FFFFFF" fill-opacity="0.85">
+      Классический опыт Томаса Юнга с полосами
+    </text>
+  </g>
+
+  <!-- Вариант 3 (● Янтарный / Жёлтый) -->
+  <g class="btn-shadow" transform="translate(80, 595)">
+    <rect width="625" height="180" rx="16" fill="#D97706"/>
+    <rect x="24" y="24" width="52" height="52" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="50" y="60" class="bold" font-size="32" fill="#FFFFFF" text-anchor="middle">●</text>
+    <text x="96" y="58" class="bold" font-size="26" fill="#FFFFFF">Дифракция электронов</text>
+    <text x="96" y="100" class="regular" font-size="16" fill="#FFFFFF" fill-opacity="0.85">
+      Рассеяние пучка частиц на кристалле никеля
+    </text>
+  </g>
+
+  <!-- Вариант 4 (■ Изумрудно-зелёный) -->
+  <g class="btn-shadow" transform="translate(735, 595)">
+    <rect width="625" height="180" rx="16" fill="#16A34A"/>
+    <rect x="24" y="24" width="52" height="52" rx="12" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="50" y="60" class="bold" font-size="32" fill="#FFFFFF" text-anchor="middle">■</text>
+    <text x="96" y="58" class="bold" font-size="26" fill="#FFFFFF">Дисперсия в призме</text>
+    <text x="96" y="100" class="regular" font-size="16" fill="#FFFFFF" fill-opacity="0.85">
+      Разложение белого света Ньютоном в непрерывный спектр
+    </text>
+  </g>
+</svg>
