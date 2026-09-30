@@ -3688,6 +3688,27 @@ svg {
   font-variant-numeric: tabular-nums;
 }
 
+.game-countdown-page h1 {
+  position: absolute;
+  top: calc(50% + 140px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90%, 720px);
+
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.game-countdown-page p {
+  position: absolute;
+  top: calc(50% + 195px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90%, 720px);
+
+  color: #858198;
+  font-size: 17px;
+}
+
 .countdown-value.is-expired {
   border-color: #d8d3e7;
   color: #858198;
@@ -3700,7 +3721,7 @@ svg {
   background: #f7f7fc;
   box-shadow: 0 0 0 7px #f7f7fc;
 }
-.game-countdown-page h1 {
+/* .game-countdown-page h1 {
   align-self: end;
   font-size: clamp(24px, 3vw, 34px);
 }
@@ -3708,7 +3729,7 @@ svg {
   align-self: start;
   color: #858198;
   font-size: 17px;
-}
+} */
 
 /* Shared host/player question presentation */
 .game-question-page {
