@@ -6,8 +6,24 @@ export interface DeadlineState {
   expired: boolean;
 }
 
+const goRFC3339Timestamp = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Go serializes time.Time as RFC3339Nano, while ECMAScript's standard date
+ * interchange format only guarantees three fractional-second digits. Normalize
+ * the server value to milliseconds before handing it to Date.parse so the
+ * result does not depend on browser-specific parsing extensions.
+ */
+export function parseServerTimestamp(timestamp: string | undefined): number {
+  if (!timestamp) return Number.NaN;
+  const parts = goRFC3339Timestamp.exec(timestamp);
+  if (!parts) return Number.NaN;
+  const milliseconds = (parts[2] ?? '').padEnd(3, '0').slice(0, 3);
+  return Date.parse(`${parts[1]}.${milliseconds}${parts[3]}`);
+}
+
 export function deadlineState(deadline: string | undefined, now = Date.now()): DeadlineState {
-  const deadlineMs = deadline ? Date.parse(deadline) : Number.NaN;
+  const deadlineMs = parseServerTimestamp(deadline);
   const remainingMs = Number.isFinite(deadlineMs) ? Math.max(0, deadlineMs - now) : 0;
   return {
     remainingMs,

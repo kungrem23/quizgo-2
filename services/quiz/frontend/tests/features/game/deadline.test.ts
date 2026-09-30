@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deadlineProgress, deadlineState, useDeadline } from '../../../src/features/game/deadline';
+import {
+  deadlineProgress,
+  deadlineState,
+  parseServerTimestamp,
+  useDeadline,
+} from '../../../src/features/game/deadline';
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('server deadline display', () => {
@@ -16,6 +22,22 @@ describe('server deadline display', () => {
       remainingSeconds: 2,
       expired: false,
     });
+  });
+
+  it('normalizes Go RFC3339Nano timestamps before browser parsing', () => {
+    const nativeParse = Date.parse;
+    vi.spyOn(Date, 'parse').mockImplementation((value) => {
+      if (/\.\d{4,}(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return Number.NaN;
+      return nativeParse(value);
+    });
+
+    expect(parseServerTimestamp('2026-09-30T12:00:03.123456789Z')).toBe(
+      Date.UTC(2026, 8, 30, 12, 0, 3, 123),
+    );
+    expect(
+      deadlineState('2026-09-30T12:00:03.123456789Z', Date.UTC(2026, 8, 30, 12, 0, 0, 223))
+        .remainingSeconds,
+    ).toBe(3);
   });
 
   it('clamps at zero without creating a phase transition', () => {
