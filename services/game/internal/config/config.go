@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,6 +15,7 @@ type Config struct {
 	Redis     Redis
 	GameTTL   time.Duration
 	WebSocket WebSocket
+	Ownership RoomOwnership
 }
 
 type QuizGRPC struct {
@@ -44,6 +47,14 @@ type WebSocket struct {
 	InvalidMessageLimit int
 }
 
+type RoomOwnership struct {
+	InstanceID    string
+	InternalURL   string
+	LeaseTTL      time.Duration
+	RenewInterval time.Duration
+	SafetyMargin  time.Duration
+}
+
 func Load() (Config, error) {
 	db, err := strconv.Atoi(envOrDefault("GAME_REDIS_DB", "0"))
 	if err != nil || db < 0 {
@@ -53,12 +64,17 @@ func Load() (Config, error) {
 	if err != nil || ttl < time.Minute || ttl > 7*24*time.Hour {
 		return Config{}, fmt.Errorf("GAME_TTL must be between 1m and 168h")
 	}
+	httpPort := envOrDefault("GAME_HTTP_PORT", "8081")
 	websocketConfig, err := loadWebSocket()
 	if err != nil {
 		return Config{}, err
 	}
+	ownershipConfig, err := loadRoomOwnership(httpPort)
+	if err != nil {
+		return Config{}, err
+	}
 	config := Config{
-		HTTPPort: envOrDefault("GAME_HTTP_PORT", "8081"),
+		HTTPPort: httpPort,
 		Quiz: QuizGRPC{
 			Address:      envOrDefault("GAME_QUIZ_GRPC_ADDRESS", "localhost:9090"),
 			ServiceToken: os.Getenv("QUIZ_GRPC_SERVICE_TOKEN"),
@@ -68,6 +84,7 @@ func Load() (Config, error) {
 		Redis:     Redis{Address: envOrDefault("GAME_REDIS_ADDRESS", "localhost:6379"), Password: os.Getenv("GAME_REDIS_PASSWORD"), DB: db},
 		GameTTL:   ttl,
 		WebSocket: websocketConfig,
+		Ownership: ownershipConfig,
 	}
 	if err := validatePort("GAME_HTTP_PORT", config.HTTPPort); err != nil {
 		return Config{}, err
@@ -86,6 +103,41 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("quiz gRPC mTLS requires CA, certificate and key")
 	}
 	return config, nil
+}
+
+func loadRoomOwnership(httpPort string) (RoomOwnership, error) {
+	instanceID := strings.TrimSpace(os.Getenv("GAME_INSTANCE_ID"))
+	if instanceID == "" {
+		instanceID, _ = os.Hostname()
+	}
+	if instanceID == "" || len(instanceID) > 128 {
+		return RoomOwnership{}, fmt.Errorf("GAME_INSTANCE_ID must contain between 1 and 128 bytes")
+	}
+	internalURL := envOrDefault("GAME_INTERNAL_URL", "http://127.0.0.1:"+httpPort)
+	parsedURL, err := url.Parse(internalURL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" ||
+		(parsedURL.Path != "" && parsedURL.Path != "/") || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || parsedURL.User != nil {
+		return RoomOwnership{}, fmt.Errorf("GAME_INTERNAL_URL must be an HTTP(S) origin without a path")
+	}
+	leaseTTL, err := duration("GAME_ROOM_LEASE_TTL", "15s", 3*time.Second, time.Minute)
+	if err != nil {
+		return RoomOwnership{}, err
+	}
+	renewInterval, err := duration("GAME_ROOM_LEASE_RENEW_INTERVAL", "5s", time.Second, 30*time.Second)
+	if err != nil {
+		return RoomOwnership{}, err
+	}
+	safetyMargin, err := duration("GAME_ROOM_LEASE_SAFETY_MARGIN", "1s", 100*time.Millisecond, 10*time.Second)
+	if err != nil {
+		return RoomOwnership{}, err
+	}
+	if renewInterval >= leaseTTL-safetyMargin {
+		return RoomOwnership{}, fmt.Errorf("GAME_ROOM_LEASE_RENEW_INTERVAL must be shorter than lease TTL minus safety margin")
+	}
+	return RoomOwnership{
+		InstanceID: instanceID, InternalURL: strings.TrimRight(internalURL, "/"),
+		LeaseTTL: leaseTTL, RenewInterval: renewInterval, SafetyMargin: safetyMargin,
+	}, nil
 }
 
 func loadWebSocket() (WebSocket, error) {

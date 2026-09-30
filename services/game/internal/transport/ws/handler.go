@@ -139,7 +139,13 @@ func (h *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	session, err := h.handshake(ctx, connection)
 	if err != nil {
 		h.writeError(ctx, connection, "", err)
-		_ = connection.Close(websocket.StatusPolicyViolation, "handshake failed")
+		status := websocket.StatusPolicyViolation
+		reason := "handshake failed"
+		if _, ok := application.IsNotRoomOwner(err); ok || errors.Is(err, application.ErrLeaseLost) {
+			status = websocket.StatusTryAgainLater
+			reason = "room owner changed"
+		}
+		_ = connection.Close(status, reason)
 		return
 	}
 
@@ -249,11 +255,14 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 			Code     string `json:"code"`
 			Nickname string `json:"nickname"`
 		}
-		if err := decodePayload(message.Payload, &payload); err != nil || strings.TrimSpace(payload.Code) == "" || len(payload.Code) > 32 || len([]rune(strings.TrimSpace(payload.Nickname))) < 1 || len([]rune(strings.TrimSpace(payload.Nickname))) > 30 {
-			if err == nil {
-				err = errInvalidPayload
-			}
+		if err := decodePayload(message.Payload, &payload); err != nil {
 			return nil, err
+		}
+		normalizedCode := strings.ToUpper(strings.TrimSpace(payload.Code))
+		expected := roomExpectedByContext(ctx)
+		if normalizedCode == "" || len(payload.Code) > 32 || len([]rune(strings.TrimSpace(payload.Nickname))) < 1 || len([]rune(strings.TrimSpace(payload.Nickname))) > 30 ||
+			(expected.code != "" && normalizedCode != expected.code) || (expected.gameID != "" && expected.code == "") {
+			return nil, errInvalidPayload
 		}
 		joined, err := h.hub.Join(ctx, payload.Code, payload.Nickname)
 		if err != nil {
@@ -279,6 +288,9 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 		if !validCredentialField(payload.GameID, 128) || !validCredentialField(payload.Ticket, 512) {
 			return nil, errInvalidPayload
 		}
+		if expected := roomExpectedByContext(ctx); expected.gameID != "" && payload.GameID != expected.gameID {
+			return nil, errInvalidPayload
+		}
 		session, err := h.hub.AuthenticateHost(ctx, payload.GameID, payload.Ticket)
 		if err != nil {
 			return nil, err
@@ -298,6 +310,9 @@ func (h *Handler) handshake(ctx context.Context, connection *websocket.Conn) (*a
 			return nil, err
 		}
 		if !validCredentialField(payload.GameID, 128) || !validCredentialField(payload.ParticipantID, 128) || !validCredentialField(payload.Ticket, 512) {
+			return nil, errInvalidPayload
+		}
+		if expected := roomExpectedByContext(ctx); expected.gameID != "" && payload.GameID != expected.gameID {
 			return nil, errInvalidPayload
 		}
 		session, err := h.hub.AuthenticatePlayer(ctx, payload.GameID, payload.ParticipantID, payload.Ticket)
@@ -383,12 +398,18 @@ func (h *Handler) writeError(ctx context.Context, connection *websocket.Conn, re
 		code = "unknown_message_type"
 	case errors.Is(err, errRateLimited):
 		code = "rate_limited"
+	case errors.Is(err, application.ErrLeaseLost):
+		code = "room_owner_changed"
 	case errors.Is(err, game.ErrInvalidPhase):
 		code = "invalid_phase"
 	case errors.Is(err, game.ErrAlreadyAnswered):
 		code = "already_answered"
 	case errors.Is(err, game.ErrQuestionClosed):
 		code = "question_closed"
+	default:
+		if _, ok := application.IsNotRoomOwner(err); ok {
+			code = "room_not_local"
+		}
 	}
 	if code == "internal_error" && h.logger != nil {
 		h.logger.Printf("websocket command failed: %v", err)

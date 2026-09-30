@@ -127,13 +127,51 @@ deadline и до отправки `state` применяет все уже пр�
 сразу закрывает его в scoreboard или `finished`. Lobby и scoreboard таймеров не
 создают.
 
-## Ограничение текущего этапа
+## Distributed room ownership
 
-Actor-loop комнат находится в памяти процесса. Redis позволяет восстановить игру
-при переподключении после рестарта, но несколько реплик game-сервиса пока нельзя
-запускать без sticky routing или распределённого владельца комнаты: разные реплики
-могут создать два loop для одной игры. Текущая конфигурация рассчитана на одну
-реплику; распределённая координация — отдельный следующий этап.
+Actor-loop по-прежнему находится только в памяти одной реплики, но перед его
+запуском реплика атомарно получает в Redis lease комнаты. Первая обратившаяся к
+неактивной комнате реплика становится owner. В lease сохраняются уникальный
+`instance_id`, внутренний URL реплики, случайный `lease_id` и возрастающий fencing
+token. Owner продлевает lease каждые 5 секунд; TTL lease по умолчанию равен 15
+секундам. Если Redis недоступен, actor работает только до локально известного
+безопасного срока lease и затем останавливается.
+
+Каждая запись игрового snapshot выполняется одним Lua-скриптом, который сначала
+сверяет `lease_id` и fencing token. Поэтому actor со старым или истёкшим lease не
+может перезаписать состояние нового owner. Освобождение lease также compare-and-delete:
+старый процесс не может удалить lease новой реплики. После потери owner другая
+реплика получает lease, читает последний подтверждённый snapshot и восстанавливает
+таймеры по сохранённым абсолютным deadline. Graceful shutdown сначала прекращает
+actor-loop и продление lease, освобождает принадлежащие процессу lease, а затем
+останавливает HTTP-сервер.
+
+Для предмаршрутизации WebSocket рекомендуется указывать комнату в URL, не меняя
+формат сообщений:
+
+```text
+/ws?code=ABC123       # join
+/ws?game_id=<UUID>    # host_auth и player_auth/reconnect
+```
+
+Если комната принадлежит другой реплике, принявший HTTP Upgrade сервис прозрачно
+проксирует соединение на `GAME_INTERNAL_URL` owner. Внутренний запрос привязан к
+конкретному `lease_id`, поэтому после смены owner старый маршрут отклоняется и
+клиент должен переподключиться. Старый URL `/ws` остаётся рабочим без изменений:
+он захватывает свободную комнату локально, но при попадании на чужого owner закрывает
+handshake с retryable WebSocket status 1013. Sticky sessions не требуются для URL
+с routing hint.
+
+Каждая реплика должна иметь уникальный `GAME_INSTANCE_ID` и собственный
+`GAME_INTERNAL_URL`, доступный другим репликам. Стандартный `compose.yaml` описывает
+одну реплику; для нескольких контейнеров им нужны отдельные DNS-имена/URL, поэтому
+его нельзя просто масштабировать с одним общим `GAME_INTERNAL_URL`.
+
+Ownership рассчитан на один логический Redis primary. Это lease с fencing, а не
+consensus-протокол: при failover Redis без гарантированно сохранённых последних
+записей возможна потеря уже подтверждённого lease или snapshot. Активные WebSocket
+не мигрируют между процессами — при падении owner они разрываются, а reconnect
+становится возможен после истечения lease (не более его TTL плюс сетевой retry).
 
 `GET /healthz` проверяет процесс, `GET /readyz` — Redis и gRPC health
 quiz-сервиса. По умолчанию размер входящего WebSocket-сообщения ограничен 16 KiB,
@@ -151,8 +189,22 @@ pong не получен за 10 секунд. Медленный клиент �
 `GAME_WS_HOST_COMMAND_BURST` и `GAME_WS_INVALID_MESSAGE_LIMIT`; значения по
 умолчанию приведены в `.env.example`.
 
+Ownership настраивается через `GAME_INSTANCE_ID`, `GAME_INTERNAL_URL`,
+`GAME_ROOM_LEASE_TTL`, `GAME_ROOM_LEASE_RENEW_INTERVAL` и
+`GAME_ROOM_LEASE_SAFETY_MARGIN`. Renew interval должен быть короче TTL минус safety
+margin. Значения по умолчанию: 15 секунд, 5 секунд и 1 секунда соответственно.
+
 Проверка сервиса:
 
 ```sh
 go test -race ./services/game/...
+```
+
+Redis-интеграционный тест lease/fencing можно дополнительно запустить на
+изолированной базе:
+
+```sh
+GAME_TEST_REDIS_ADDRESS=127.0.0.1:6379 go test \
+  ./services/game/tests/redis ./services/game/tests/ws \
+  -run 'TestRoomLeaseExpiryAndFencing|TestRoomRouterTwoReplicasWithRedis' -count=1
 ```

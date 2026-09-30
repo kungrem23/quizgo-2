@@ -48,7 +48,11 @@ func run() error {
 	})
 	defer games.Close()
 	gameService := application.New(quizgrpc.New(quizConnection, settings.Quiz.ServiceToken), games, settings.GameTTL)
-	hub := application.NewHub(games, settings.GameTTL)
+	hub := application.NewDistributedHub(games, games, settings.GameTTL, application.OwnershipOptions{
+		InstanceID: settings.Ownership.InstanceID, InternalURL: settings.Ownership.InternalURL,
+		LeaseTTL: settings.Ownership.LeaseTTL, RenewInterval: settings.Ownership.RenewInterval,
+		SafetyMargin: settings.Ownership.SafetyMargin,
+	})
 	defer hub.Close()
 	healthClient := grpc_health_v1.NewHealthClient(quizConnection)
 	websocketHandler := websockettransport.NewWithOptions(hub, log.Default(), websockettransport.Options{
@@ -64,7 +68,8 @@ func run() error {
 		HostCommandBurst:    settings.WebSocket.HostCommandBurst,
 		InvalidMessageLimit: settings.WebSocket.InvalidMessageLimit,
 	})
-	router := httptransport.New(gameService, websocketHandler,
+	realtimeRouter := websockettransport.NewRoomRouter(hub, websocketHandler, log.Default())
+	router := httptransport.New(gameService, realtimeRouter,
 		httptransport.Dependency{Name: "redis", Check: withTimeout(games.Ping)},
 		httptransport.Dependency{Name: "quiz", Check: withTimeout(func(ctx context.Context) error {
 			response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "quiz.v1.QuizCatalogService"})
@@ -101,6 +106,10 @@ func run() error {
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// Upgraded WebSocket connections are not drained by net/http. Stop room
+	// actors first so leases are no longer renewed and can be released while
+	// Redis is still available.
+	hub.Close()
 	if err := server.Shutdown(shutdownCtx); err != nil && serveErr == nil {
 		serveErr = err
 	}

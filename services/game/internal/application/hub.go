@@ -101,22 +101,47 @@ type StateView struct {
 }
 
 type Hub struct {
-	repository GameRepository
-	ttl        time.Duration
-	now        func() time.Time
-	newID      func() string
-	newTicket  func() (string, error)
+	repository   GameRepository
+	ownership    RoomOwnershipStore
+	owner        RoomOwner
+	leaseTTL     time.Duration
+	renewEvery   time.Duration
+	safetyMargin time.Duration
+	ttl          time.Duration
+	now          func() time.Time
+	newID        func() string
+	newTicket    func() (string, error)
 
-	mu     sync.Mutex
-	rooms  map[string]*room
-	closed bool
+	mu       sync.Mutex
+	rooms    map[string]*room
+	starting map[string]*roomStart
+	closed   bool
+}
+
+type roomStart struct {
+	done chan struct{}
+	room *room
+	err  error
 }
 
 func NewHub(repository GameRepository, ttl time.Duration) *Hub {
 	return &Hub{
 		repository: repository, ttl: ttl, now: time.Now,
-		newID: uuid.NewString, newTicket: randomTicket, rooms: make(map[string]*room),
+		newID: uuid.NewString, newTicket: randomTicket,
+		rooms: make(map[string]*room), starting: make(map[string]*roomStart),
 	}
+}
+
+// NewDistributedHub creates a Hub whose local actors must hold a Redis-backed
+// lease. The regular NewHub remains useful for isolated unit tests.
+func NewDistributedHub(repository GameRepository, ownership RoomOwnershipStore, ttl time.Duration, options OwnershipOptions) *Hub {
+	hub := NewHub(repository, ttl)
+	hub.ownership = ownership
+	hub.owner = RoomOwner{InstanceID: options.InstanceID, InternalURL: options.InternalURL}
+	hub.leaseTTL = options.LeaseTTL
+	hub.renewEvery = options.RenewInterval
+	hub.safetyMargin = options.SafetyMargin
+	return hub
 }
 
 func (h *Hub) Join(ctx context.Context, code, nickname string) (JoinedPlayer, error) {
@@ -128,7 +153,7 @@ func (h *Hub) Join(ctx context.Context, code, nickname string) (JoinedPlayer, er
 	if err != nil {
 		return JoinedPlayer{}, err
 	}
-	room, err := h.roomFor(value)
+	room, err := h.roomForID(ctx, value.ID)
 	if err != nil {
 		return JoinedPlayer{}, err
 	}
@@ -166,11 +191,7 @@ func (h *Hub) authenticate(ctx context.Context, gameID, participantID string, ro
 	if gameID == "" || participantID == "" || ticket == "" {
 		return nil, game.ErrUnauthorized
 	}
-	value, err := h.repository.GetByID(ctx, gameID)
-	if err != nil {
-		return nil, err
-	}
-	room, err := h.roomFor(value)
+	room, err := h.roomForID(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
@@ -252,32 +273,130 @@ func (h *Hub) Close() {
 	}
 }
 
-func (h *Hub) roomFor(value game.Game) (*room, error) {
+func (h *Hub) RouteByID(ctx context.Context, gameID string) (RoomRoute, error) {
+	room, err := h.roomForID(ctx, gameID)
+	if err != nil {
+		if notOwner, ok := IsNotRoomOwner(err); ok {
+			return RoomRoute{GameID: gameID, Owner: notOwner.Owner}, nil
+		}
+		return RoomRoute{}, err
+	}
+	return RoomRoute{GameID: gameID, Local: true, Owner: room.lease.Owner}, nil
+}
+
+func (h *Hub) RouteByCode(ctx context.Context, code string) (RoomRoute, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	value, err := h.repository.GetByCode(ctx, code)
+	if err != nil {
+		return RoomRoute{}, err
+	}
+	return h.RouteByID(ctx, value.ID)
+}
+
+func (h *Hub) roomForID(ctx context.Context, gameID string) (*room, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.closed {
+		h.mu.Unlock()
 		return nil, errors.New("game hub is closed")
 	}
-	if existing := h.rooms[value.ID]; existing != nil {
+	if existing := h.rooms[gameID]; existing != nil {
+		h.mu.Unlock()
 		return existing, nil
 	}
-	created := &room{
-		game: value, repository: h.repository, ttl: h.ttl,
-		requests: make(chan roomRequest, 64), done: make(chan struct{}), subscribers: make(map[string]*Session),
+	if starting := h.starting[gameID]; starting != nil {
+		h.mu.Unlock()
+		select {
+		case <-starting.done:
+			return starting.room, starting.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	h.rooms[value.ID] = created
+	starting := &roomStart{done: make(chan struct{})}
+	h.starting[gameID] = starting
+	h.mu.Unlock()
+
+	created, err := h.prepareRoom(ctx, gameID)
+
+	h.mu.Lock()
+	delete(h.starting, gameID)
+	if err == nil && !h.closed {
+		h.rooms[gameID] = created
+		starting.room = created
+	} else if err == nil {
+		err = errors.New("game hub is closed")
+	}
+	starting.err = err
+	close(starting.done)
+	h.mu.Unlock()
+	if err != nil {
+		if created != nil && created.ownership != nil {
+			created.releaseLease()
+		}
+		return nil, err
+	}
 	go created.run()
 	return created, nil
+}
+
+func (h *Hub) prepareRoom(ctx context.Context, gameID string) (*room, error) {
+	var lease RoomLease
+	leaseValidUntil := time.Time{}
+	if h.ownership != nil {
+		startedAt := time.Now()
+		candidate := h.owner
+		candidate.LeaseID = uuid.NewString()
+		acquiredLease, acquired, err := h.ownership.AcquireRoom(ctx, gameID, candidate, h.leaseTTL, h.ttl)
+		if err != nil {
+			return nil, err
+		}
+		if !acquired {
+			return nil, &NotRoomOwnerError{GameID: gameID, Owner: acquiredLease.Owner}
+		}
+		lease = acquiredLease
+		leaseValidUntil = startedAt.Add(h.leaseTTL - h.safetyMargin)
+	}
+	value, err := h.repository.GetByID(ctx, gameID)
+	if err != nil {
+		if h.ownership != nil {
+			_ = h.ownership.ReleaseRoom(context.Background(), lease)
+		}
+		return nil, err
+	}
+	created := &room{
+		game: value, repository: h.repository, ownership: h.ownership, lease: lease,
+		leaseTTL: h.leaseTTL, renewEvery: h.renewEvery, safetyMargin: h.safetyMargin,
+		leaseValidUntil: leaseValidUntil, ttl: h.ttl,
+		requests: make(chan roomRequest, 64), done: make(chan struct{}), subscribers: make(map[string]*Session),
+	}
+	created.onStopped = func() { h.removeRoom(gameID, created) }
+	return created, nil
+}
+
+func (h *Hub) removeRoom(gameID string, stopped *room) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.rooms[gameID] == stopped {
+		delete(h.rooms, gameID)
+	}
 }
 
 type room struct {
 	game              game.Game
 	repository        GameRepository
+	ownership         RoomOwnershipStore
+	lease             RoomLease
+	leaseTTL          time.Duration
+	renewEvery        time.Duration
+	safetyMargin      time.Duration
+	leaseValidUntil   time.Time
+	leaseLost         bool
 	ttl               time.Duration
 	requests          chan roomRequest
 	done              chan struct{}
 	subscribers       map[string]*Session
 	transitionRetryAt time.Time
+	onStopped         func()
 }
 
 type roomRequest struct {
@@ -324,17 +443,46 @@ func awaitRoomResponse(ctx context.Context, room *room, response <-chan roomResp
 }
 
 func (r *room) run() {
-	defer close(r.done)
 	var timer *time.Timer
+	var renewTicker *time.Ticker
+	var renewC <-chan time.Time
+	var leaseTimer *time.Timer
+	var leaseExpiryC <-chan time.Time
+	if r.ownership != nil {
+		renewTicker = time.NewTicker(r.renewEvery)
+		renewC = renewTicker.C
+		leaseTimer = time.NewTimer(time.Until(r.leaseValidUntil))
+		leaseExpiryC = leaseTimer.C
+	}
 	defer func() {
 		if timer != nil {
 			timer.Stop()
 		}
+		if renewTicker != nil {
+			renewTicker.Stop()
+		}
+		if leaseTimer != nil {
+			leaseTimer.Stop()
+		}
+		for id := range r.subscribers {
+			r.removeSubscriber(id)
+		}
+		r.releaseLease()
+		if r.onStopped != nil {
+			r.onStopped()
+		}
+		close(r.done)
 	}()
 	for {
 		now := time.Now()
+		if !r.ownsLease(now) {
+			return
+		}
 		if !r.transitionRetryAt.After(now) {
 			if err := r.advanceExpiredTimedPhases(now); err != nil {
+				if errors.Is(err, ErrLeaseLost) {
+					return
+				}
 				r.transitionRetryAt = now.Add(500 * time.Millisecond)
 			} else {
 				r.transitionRetryAt = time.Time{}
@@ -371,10 +519,11 @@ func (r *room) run() {
 
 		select {
 		case request := <-r.requests:
+			if !r.ownsLease(time.Now()) {
+				r.respond(request, roomResponse{err: ErrLeaseLost})
+				return
+			}
 			if request.kind == "stop" {
-				for id := range r.subscribers {
-					r.removeSubscriber(id)
-				}
 				return
 			}
 			if request.kind == "authenticate" {
@@ -387,15 +536,73 @@ func (r *room) run() {
 				r.transitionRetryAt = time.Time{}
 			}
 			r.handle(request)
+			if r.leaseLost {
+				return
+			}
 		case <-timerC:
 			now := time.Now()
 			if err := r.advanceExpiredTimedPhases(now); err != nil {
+				if errors.Is(err, ErrLeaseLost) {
+					return
+				}
 				r.transitionRetryAt = now.Add(500 * time.Millisecond)
 			} else {
 				r.transitionRetryAt = time.Time{}
 			}
+		case <-renewC:
+			startedAt := time.Now()
+			renewed, err := r.renewLease(startedAt)
+			if err == nil && !renewed {
+				return
+			}
+			if err == nil {
+				resetTimer(leaseTimer, time.Until(r.leaseValidUntil))
+			}
+		case <-leaseExpiryC:
+			return
 		}
 	}
+}
+
+func (r *room) ownsLease(now time.Time) bool {
+	return r.ownership == nil || (!r.leaseLost && now.Before(r.leaseValidUntil))
+}
+
+func (r *room) renewLease(startedAt time.Time) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), min(2*time.Second, r.renewEvery))
+	defer cancel()
+	renewed, err := r.ownership.RenewRoom(ctx, r.lease, r.leaseTTL, r.ttl)
+	if err != nil {
+		return false, err
+	}
+	if !renewed {
+		r.leaseLost = true
+		return false, nil
+	}
+	r.leaseValidUntil = startedAt.Add(r.leaseTTL - r.safetyMargin)
+	return true, nil
+}
+
+func (r *room) releaseLease() {
+	if r.ownership == nil || r.lease.GameID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = r.ownership.ReleaseRoom(ctx, r.lease)
+}
+
+func resetTimer(timer *time.Timer, delay time.Duration) {
+	if timer == nil {
+		return
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(max(delay, 0))
 }
 
 func (r *room) handle(request roomRequest) {
@@ -670,7 +877,14 @@ func (r *room) closeExpiredQuestion(now time.Time) error {
 func (r *room) persist(candidate game.Game) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	return r.repository.Update(ctx, candidate, r.ttl)
+	if r.ownership == nil {
+		return r.repository.Update(ctx, candidate, r.ttl)
+	}
+	err := r.ownership.UpdateOwned(ctx, candidate, r.ttl, r.lease)
+	if errors.Is(err, ErrLeaseLost) {
+		r.leaseLost = true
+	}
+	return err
 }
 
 func (r *room) replay(request roomRequest) bool {
