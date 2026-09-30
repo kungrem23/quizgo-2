@@ -6,6 +6,7 @@ import { GameCommandError } from './socket';
 import type { GamePlayer } from './types';
 import { JoinQRCode } from './JoinQRCode';
 import { gameJoinURL } from './urls';
+import { HostFinishButton } from './HostFinishButton';
 
 const avatarTones = ['red', 'blue', 'amber', 'purple', 'green', 'pink', 'teal'];
 
@@ -114,6 +115,11 @@ export function HostLobby() {
             QuizGo<span>.</span>
           </span>
           <strong className="host-lobby-title">{snapshot.quiz_title}</strong>
+          <HostFinishButton
+            className="host-lobby-finish"
+            sendCommand={sendCommand}
+            disabled={!connected || anyCommandPending}
+          />
           <span className={`host-connection ${connected ? 'is-connected' : ''}`}>
             <Wifi size={15} />
             {connected ? 'Подключено' : 'Нет соединения'}

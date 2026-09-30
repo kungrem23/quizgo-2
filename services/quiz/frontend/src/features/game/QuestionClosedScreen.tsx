@@ -3,6 +3,7 @@ import { ArrowRight, Check, Hourglass, Trophy, X } from 'lucide-react';
 import { Button, ErrorBox } from '../../shared/ui/ui';
 import { GameCommandError, type PendingGameCommand } from './socket';
 import type { GameAnswer, GameCommand, GameRole, GameStateSnapshot } from './types';
+import { HostFinishButton } from './HostFinishButton';
 
 type SendCommand = (command: GameCommand, requestId?: string) => PendingGameCommand;
 type PlayerOutcome = 'correct' | 'incorrect' | 'timeout' | 'unknown';
@@ -57,10 +58,13 @@ function HostLeaderboard({
           <span>Вопрос {snapshot.current_question_index + 1} завершён</span>
           <h1>Таблица лидеров</h1>
         </div>
-        <Button busy={pending} onClick={() => void next()}>
-          Следующий вопрос
-          <ArrowRight size={17} />
-        </Button>
+        <div className="game-rating-actions">
+          {sendCommand && <HostFinishButton sendCommand={sendCommand} disabled={pending} />}
+          <Button busy={pending} onClick={() => void next()}>
+            Следующий вопрос
+            <ArrowRight size={17} />
+          </Button>
+        </div>
       </header>
 
       <section className="game-rating-main" aria-label="Таблица лидеров">

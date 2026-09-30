@@ -5,6 +5,7 @@ import { AnswerGrid } from './AnswerGrid';
 import { deadlineProgress, useDeadline, type DeadlineState } from './deadline';
 import { GameCommandError, type GameSocketStatus, type PendingGameCommand } from './socket';
 import type { GameCommand, GameStateSnapshot } from './types';
+import { HostFinishButton } from './HostFinishButton';
 
 type SendCommand = (command: GameCommand, requestId?: string) => PendingGameCommand;
 
@@ -19,10 +20,12 @@ function QuestionHeader({
   snapshot,
   status,
   remainingSeconds,
+  action,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
   remainingSeconds: number;
+  action?: React.ReactNode;
 }) {
   return (
     <header className="game-question-header">
@@ -31,6 +34,7 @@ function QuestionHeader({
       </span>
       <span className="game-question-number">Вопрос {snapshot.current_question_index + 1}</span>
       <strong>{snapshot.quiz_title}</strong>
+      {action}
       <span className={`game-question-online ${status.state === 'open' ? 'is-connected' : ''}`}>
         <Wifi size={14} />
         {status.state === 'open' ? 'В сети' : 'Нет соединения'}
@@ -63,11 +67,13 @@ function QuestionShell({
   snapshot,
   status,
   deadline,
+  headerAction,
   children,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
   deadline: DeadlineState;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const question = snapshot.current_question!;
@@ -83,6 +89,7 @@ function QuestionShell({
         snapshot={snapshot}
         status={status}
         remainingSeconds={deadline.remainingSeconds}
+        action={headerAction}
       />
       <div className="game-question-main">
         <QuestionCard snapshot={snapshot} />
@@ -101,15 +108,28 @@ export function HostQuestionScreen({
   snapshot,
   status,
   answeredPlayerIds,
+  sendCommand,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
   answeredPlayerIds: string[] | null;
+  sendCommand: SendCommand;
 }) {
   const question = snapshot.current_question!;
   const deadline = useDeadline(snapshot.question_closes_at);
   return (
-    <QuestionShell snapshot={snapshot} status={status} deadline={deadline}>
+    <QuestionShell
+      snapshot={snapshot}
+      status={status}
+      deadline={deadline}
+      headerAction={
+        <HostFinishButton
+          className="question-finish"
+          sendCommand={sendCommand}
+          disabled={status.state !== 'open'}
+        />
+      }
+    >
       <div className="host-answer-progress" aria-live="polite">
         <strong>{answeredPlayerIds === null ? '—' : answeredPlayerIds.length}</strong>
         <span>из {snapshot.players.length} игроков ответили</span>

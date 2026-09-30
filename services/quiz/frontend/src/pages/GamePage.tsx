@@ -6,6 +6,7 @@ import {
   type GameCredentials,
 } from '../features/game/credentials';
 import { CountdownScreen } from '../features/game/CountdownScreen';
+import { FinalResultsScreen } from '../features/game/FinalResultsScreen';
 import { GameSessionProvider, useGameSession } from '../features/game/GameSession';
 import { HostLobby } from '../features/game/HostLobby';
 import { PlayerLobby } from '../features/game/PlayerLobby';
@@ -57,12 +58,19 @@ function FoundationGameView({ role }: { role: GameRole }) {
   );
 }
 
-function HostGameView() {
+function HostGameView({ quizId }: { quizId?: number }) {
   const { game, status, error, sendCommand } = useGameSession();
   if (!game.snapshot && !error) return <Loading label="Подключаем комнату…" />;
   if (game.snapshot?.phase === 'lobby') return <HostLobby />;
   if (game.snapshot?.phase === 'countdown') {
-    return <CountdownScreen snapshot={game.snapshot} status={status} />;
+    return (
+      <CountdownScreen
+        snapshot={game.snapshot}
+        status={status}
+        role="host"
+        sendCommand={sendCommand}
+      />
+    );
   }
   if (game.snapshot?.phase === 'question_open' && game.snapshot.current_question) {
     return (
@@ -70,11 +78,15 @@ function HostGameView() {
         snapshot={game.snapshot}
         status={status}
         answeredPlayerIds={game.answeredPlayerIds}
+        sendCommand={sendCommand}
       />
     );
   }
   if (game.snapshot?.phase === 'scoreboard' || game.snapshot?.phase === 'question_closed') {
     return <QuestionClosedScreen role="host" snapshot={game.snapshot} sendCommand={sendCommand} />;
+  }
+  if (game.snapshot?.phase === 'finished') {
+    return <FinalResultsScreen role="host" snapshot={game.snapshot} quizId={quizId} />;
   }
   return <FoundationGameView role="host" />;
 }
@@ -86,7 +98,7 @@ function PlayerGameView({ nickname, playerId }: { nickname: string; playerId: st
     return <PlayerLobby nickname={nickname} />;
   }
   if (game.snapshot?.phase === 'countdown') {
-    return <CountdownScreen snapshot={game.snapshot} status={status} />;
+    return <CountdownScreen snapshot={game.snapshot} status={status} role="player" />;
   }
   if (game.snapshot?.phase === 'question_open' && game.snapshot.current_question) {
     return (
@@ -118,6 +130,9 @@ function PlayerGameView({ nickname, playerId }: { nickname: string; playerId: st
       />
     );
   }
+  if (game.snapshot?.phase === 'finished') {
+    return <FinalResultsScreen role="player" snapshot={game.snapshot} playerId={playerId} />;
+  }
   return <FoundationGameView role="player" />;
 }
 
@@ -144,7 +159,9 @@ function GameCredentialGuard({
 export function HostGamePage() {
   return (
     <GameCredentialGuard role="host">
-      <HostGameView />
+      {(credentials) =>
+        credentials.role === 'host' ? <HostGameView quizId={credentials.quizId} /> : null
+      }
     </GameCredentialGuard>
   );
 }

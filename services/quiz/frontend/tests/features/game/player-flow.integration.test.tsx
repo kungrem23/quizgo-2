@@ -190,6 +190,7 @@ describe('player join route flow', () => {
         gameId: 'game-1',
         code: 'ABC123',
         hostTicket: 'host-ticket',
+        quizId: 42,
       }),
     ).toBe(true);
     const hostRouter = createMemoryRouter(
@@ -389,7 +390,16 @@ describe('player join route flow', () => {
       gameSocket.receive(finished);
       hostSocket.receive(finished);
     });
-    expect(await within(playerView.container).findByText('finished')).toBeTruthy();
+    expect(
+      await within(playerView.container).findByRole('heading', { name: 'Великолепная игра!' }),
+    ).toBeTruthy();
+    expect(within(playerView.container).getByText('Вы заняли 1 место')).toBeTruthy();
+    expect(within(playerView.container).getByText('Итоговый счёт')).toBeTruthy();
+    expect(
+      await within(hostView.container).findByRole('heading', { name: 'Финальные результаты' }),
+    ).toBeTruthy();
+    expect(within(hostView.container).getByLabelText('1 место')).toBeTruthy();
+    expect(within(hostView.container).getByRole('button', { name: 'Сыграть ещё раз' })).toBeTruthy();
     expect(
       within(hostView.container).queryByRole('button', { name: 'Следующий вопрос' }),
     ).toBeNull();
@@ -428,6 +438,63 @@ describe('player join route flow', () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(router.state.location.pathname).toBe('/join/ABC123');
     expect(loadPlayerCredentials('game-1')).toBeNull();
+  });
+
+  it('shows final host results after an early finish command', async () => {
+    expect(
+      saveGameCredentials({
+        role: 'host',
+        gameId: 'game-1',
+        code: 'ABC123',
+        hostTicket: 'host-ticket',
+      }),
+    ).toBe(true);
+    const router = createMemoryRouter(
+      [{ path: '/games/:gameId/host', element: <HostGamePage /> }],
+      { initialEntries: ['/games/game-1/host'] },
+    );
+    const user = userEvent.setup();
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+    const hostSocket = TestWebSocket.instances[0];
+    await waitFor(() => expect(hostSocket.sent[0]?.type).toBe('host_auth'));
+    act(() => {
+      hostSocket.receive({
+        type: 'state',
+        sequence: 2,
+        payload: snapshot('countdown'),
+      });
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Завершить игру' }));
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Завершить игру' }),
+    );
+    const finishMessage = hostSocket.sent[1];
+    expect(finishMessage).toEqual(expect.objectContaining({ type: 'finish' }));
+
+    act(() => {
+      hostSocket.receive({
+        type: 'game_finished',
+        sequence: 3,
+        payload: {
+          ...snapshot('countdown'),
+          phase: 'finished',
+          countdown_ends_at: undefined,
+        },
+      });
+      hostSocket.receive({
+        type: 'command_accepted',
+        request_id: finishMessage.request_id,
+        sequence: 3,
+        payload: { duplicate: false },
+      });
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Финальные результаты' })).toBeTruthy();
+    expect(screen.getByLabelText('1 место')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Сыграть ещё раз' })).toBeNull();
   });
 
   it('leaves explicitly, removes credentials and cleans up the game socket', async () => {
