@@ -765,6 +765,11 @@ func (r *room) answer(request roomRequest) {
 	}
 	candidate := cloneGame(r.game)
 	submission, err := candidate.SubmitAnswer(request.session.ParticipantID, request.answerID, request.now)
+	questionClosed := false
+	if err == nil && candidate.AllPlayersAnswered() {
+		err = candidate.CloseQuestion(request.now)
+		questionClosed = err == nil
+	}
 	if err == nil {
 		r.remember(&candidate, request)
 		err = r.persist(candidate)
@@ -773,6 +778,9 @@ func (r *room) answer(request roomRequest) {
 		r.game = candidate
 		r.send(request.session, OutboundEvent{Type: "answer_accepted", Sequence: r.game.Sequence, Payload: map[string]any{"question_id": submission.QuestionID}})
 		r.broadcast(OutboundEvent{Type: "player_answered", Sequence: r.game.Sequence, Payload: map[string]string{"player_id": submission.PlayerID}})
+		if questionClosed {
+			r.broadcastQuestionClosed()
+		}
 	}
 	r.respond(request, roomResponse{err: err})
 }
@@ -928,6 +936,11 @@ func (r *room) closeExpiredQuestion(now time.Time) error {
 		return err
 	}
 	r.game = candidate
+	r.broadcastQuestionClosed()
+	return nil
+}
+
+func (r *room) broadcastQuestionClosed() {
 	question, _ := r.game.CurrentQuestion()
 	r.broadcast(OutboundEvent{Type: "question_closed", Sequence: r.game.Sequence, Payload: map[string]any{
 		"phase": r.game.Phase, "question_id": question.ID, "correct_answer_ids": correctAnswerIDs(question), "players": leaderboard(r.game.Players),
@@ -935,7 +948,6 @@ func (r *room) closeExpiredQuestion(now time.Time) error {
 	if r.game.Phase == game.PhaseFinished {
 		r.broadcast(OutboundEvent{Type: "game_finished", Sequence: r.game.Sequence, Payload: stateView(r.game)})
 	}
-	return nil
 }
 
 func (r *room) persist(candidate game.Game) error {

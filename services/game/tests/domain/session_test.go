@@ -192,7 +192,7 @@ func TestThreeQuestionLifecycleAdvancesCurrentQuestion(t *testing.T) {
 	}
 }
 
-func TestAllPlayersAnsweredKeepsQuestionOpenUntilDeadline(t *testing.T) {
+func TestAllPlayersAnsweredOnlyAfterEveryPlayerSubmits(t *testing.T) {
 	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
 	session, err := NewGame("game-1", "ABC123", 7, validSnapshot(), now)
 	if err != nil {
@@ -219,18 +219,14 @@ func TestAllPlayersAnsweredKeepsQuestionOpenUntilDeadline(t *testing.T) {
 	if _, err := session.SubmitAnswer("player-1", 4, deadline.Add(-2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
+	if session.AllPlayersAnswered() {
+		t.Fatal("all players reported as answered after only one submission")
+	}
 	if _, err := session.SubmitAnswer("player-2", 5, deadline.Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
-
-	if session.Phase != PhaseQuestionOpen {
-		t.Fatalf("phase after every player answered = %s, want %s", session.Phase, PhaseQuestionOpen)
-	}
-	if session.QuestionClosesAt == nil || !session.QuestionClosesAt.Equal(deadline) {
-		t.Fatalf("answer submissions changed close deadline: got %v want %v", session.QuestionClosesAt, deadline)
-	}
-	if session.CurrentQuestionIndex != 0 {
-		t.Fatalf("answer submissions changed current question index to %d", session.CurrentQuestionIndex)
+	if !session.AllPlayersAnswered() {
+		t.Fatal("all players not reported as answered after every player submitted")
 	}
 }
 

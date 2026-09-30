@@ -197,6 +197,30 @@ func (g *Game) SubmitAnswer(playerID string, answerID int64, now time.Time) (Sub
 	return submission, nil
 }
 
+// AllPlayersAnswered reports whether every player in the game has submitted an
+// answer for the currently open question.
+func (g *Game) AllPlayersAnswered() bool {
+	if g == nil || g.Phase != PhaseQuestionOpen || len(g.Players) == 0 {
+		return false
+	}
+	question, ok := g.CurrentQuestion()
+	if !ok {
+		return false
+	}
+	answered := make(map[string]struct{}, len(g.Players))
+	for _, submission := range g.Submissions {
+		if submission.QuestionID == question.ID {
+			answered[submission.PlayerID] = struct{}{}
+		}
+	}
+	for _, player := range g.Players {
+		if _, ok := answered[player.ID]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (g *Game) CloseQuestion(now time.Time) error {
 	if g == nil || g.Phase != PhaseQuestionOpen {
 		return ErrInvalidPhase
