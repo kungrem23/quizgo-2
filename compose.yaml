@@ -149,6 +149,7 @@ services:
       context: ./services/quiz/frontend
       args:
         VITE_GAME_ORIGIN: https://${GAME_DOMAIN:?Set GAME_DOMAIN in .env}
+        VITE_QUIZ_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env}
     restart: unless-stopped
     logging: *default-logging
     ports:

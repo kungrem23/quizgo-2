@@ -1,5 +1,5 @@
-function configuredGameOrigin(): string {
-  const configured = import.meta.env.VITE_GAME_ORIGIN?.trim();
+function configuredOrigin(value: string | undefined): string {
+  const configured = value?.trim();
   if (!configured) return window.location.origin;
 
   try {
@@ -10,5 +10,12 @@ function configuredGameOrigin(): string {
 }
 
 export function gameJoinURL(code: string): string {
-  return new URL(`/join/${encodeURIComponent(code)}`, configuredGameOrigin()).toString();
+  return new URL(
+    `/join/${encodeURIComponent(code)}`,
+    configuredOrigin(import.meta.env.VITE_GAME_ORIGIN),
+  ).toString();
+}
+
+export function quizURL(path: string): string {
+  return new URL(path, configuredOrigin(import.meta.env.VITE_QUIZ_ORIGIN)).toString();
 }

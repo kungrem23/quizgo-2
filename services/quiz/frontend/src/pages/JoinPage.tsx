@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { GameSocket } from '../features/game/socket';
 import { saveGameCredentials } from '../features/game/credentials';
 import type { GameErrorCode } from '../features/game/types';
+import { quizURL } from '../features/game/urls';
 import { Brand, Button, ErrorBox } from '../shared/ui/ui';
 
 function normalizeCode(value: string): string {
@@ -129,7 +130,7 @@ export function JoinPage() {
             Войти в игру
           </Button>
         </form>
-        <Link to="/quizzes">Вернуться к квизам</Link>
+        <a href={quizURL('/quizzes')}>Вернуться к квизам</a>
       </div>
     </main>
   );
