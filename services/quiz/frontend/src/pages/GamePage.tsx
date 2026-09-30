@@ -5,10 +5,13 @@ import {
   loadPlayerCredentials,
   type GameCredentials,
 } from '../features/game/credentials';
+import { CountdownScreen } from '../features/game/CountdownScreen';
 import { GameSessionProvider, useGameSession } from '../features/game/GameSession';
+import { HostLobby } from '../features/game/HostLobby';
+import { PlayerLobby } from '../features/game/PlayerLobby';
+import { HostQuestionScreen, PlayerQuestionScreen } from '../features/game/QuestionScreen';
 import type { GameRole } from '../features/game/types';
 import { ErrorBox, Loading } from '../shared/ui/ui';
-import { HostLobby } from '../features/game/HostLobby';
 
 function MissingCredentials({ role }: { role: GameRole }) {
   return (
@@ -54,20 +57,65 @@ function FoundationGameView({ role }: { role: GameRole }) {
 }
 
 function HostGameView() {
-  const { game, error } = useGameSession();
+  const { game, status, error } = useGameSession();
   if (!game.snapshot && !error) return <Loading label="Подключаем комнату…" />;
   if (game.snapshot?.phase === 'lobby') return <HostLobby />;
+  if (game.snapshot?.phase === 'countdown') {
+    return <CountdownScreen snapshot={game.snapshot} status={status} />;
+  }
+  if (game.snapshot?.phase === 'question_open' && game.snapshot.current_question) {
+    return (
+      <HostQuestionScreen
+        snapshot={game.snapshot}
+        status={status}
+        answeredPlayerIds={game.answeredPlayerIds}
+      />
+    );
+  }
   return <FoundationGameView role="host" />;
 }
 
-function GameCredentialGuard({ role, children }: { role: GameRole; children: ReactNode }) {
+function PlayerGameView({ nickname }: { nickname: string }) {
+  const { game, status, error, sendCommand } = useGameSession();
+  if (!game.snapshot && !error) return <Loading label="Подключаемся к игре…" />;
+  if (game.snapshot?.phase === 'lobby') {
+    return <PlayerLobby nickname={nickname} />;
+  }
+  if (game.snapshot?.phase === 'countdown') {
+    return <CountdownScreen snapshot={game.snapshot} status={status} />;
+  }
+  if (game.snapshot?.phase === 'question_open' && game.snapshot.current_question) {
+    return (
+      <PlayerQuestionScreen
+        key={game.snapshot.current_question.id}
+        snapshot={game.snapshot}
+        status={status}
+        acceptedQuestionIds={game.acceptedQuestionIds}
+        sendCommand={sendCommand}
+      />
+    );
+  }
+  return <FoundationGameView role="player" />;
+}
+
+function GameCredentialGuard({
+  role,
+  children,
+}: {
+  role: GameRole;
+  children: ReactNode | ((credentials: GameCredentials) => ReactNode);
+}) {
   const gameId = useParams().gameId || '';
   const credentials = useMemo<GameCredentials | null>(
     () => (role === 'host' ? loadHostCredentials(gameId) : loadPlayerCredentials(gameId)),
     [gameId, role],
   );
   if (!gameId || !credentials) return <MissingCredentials role={role} />;
-  return <GameSessionProvider credentials={credentials}>{children}</GameSessionProvider>;
+  return (
+    <GameSessionProvider credentials={credentials}>
+      {typeof children === 'function' ? children(credentials) : children}
+    </GameSessionProvider>
+  );
 }
 
 export function HostGamePage() {
@@ -81,7 +129,9 @@ export function HostGamePage() {
 export function PlayerGamePage() {
   return (
     <GameCredentialGuard role="player">
-      <FoundationGameView role="player" />
+      {(credentials) =>
+        credentials.role === 'player' ? <PlayerGameView nickname={credentials.nickname} /> : null
+      }
     </GameCredentialGuard>
   );
 }

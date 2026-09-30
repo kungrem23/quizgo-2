@@ -141,4 +141,90 @@ describe('authoritative game reducer', () => {
     });
     expect(state.answeredPlayerIds).toBeNull();
   });
+
+  it('follows countdown, question_open and question_closed server transitions', () => {
+    let state = gameReducer(initialGameState, { type: 'message', message: snapshot(1) });
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'countdown_started',
+        sequence: 2,
+        payload: {
+          game_id: 'game-1',
+          code: 'ABC123',
+          quiz_title: 'Quiz',
+          phase: 'countdown',
+          players: [{ id: 'p1', nickname: 'Alice', score: 0 }],
+          current_question_index: 0,
+          countdown_ends_at: '2026-09-30T12:00:03Z',
+        },
+      }),
+    });
+    expect(state.snapshot?.phase).toBe('countdown');
+    expect(state.snapshot?.current_question).toBeUndefined();
+
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'question_opened',
+        sequence: 3,
+        payload: {
+          game_id: 'game-1',
+          code: 'ABC123',
+          quiz_title: 'Quiz',
+          phase: 'question_open',
+          players: [{ id: 'p1', nickname: 'Alice', score: 0 }],
+          current_question_index: 0,
+          current_question: {
+            id: 10,
+            text: 'Question?',
+            time_limit_seconds: 20,
+            answers: [
+              { id: 11, text: 'A' },
+              { id: 12, text: 'B' },
+            ],
+          },
+          question_closes_at: '2026-09-30T12:00:23Z',
+        },
+      }),
+    });
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'player_answered',
+        sequence: 4,
+        payload: { player_id: 'p1' },
+      }),
+    });
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'answer_accepted',
+        sequence: 4,
+        payload: { question_id: 10 },
+      }),
+    });
+    expect(state.snapshot?.phase).toBe('question_open');
+    expect(state.answeredPlayerIds).toEqual(['p1']);
+    expect(state.acceptedQuestionIds).toEqual([10]);
+
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'question_closed',
+        sequence: 5,
+        payload: {
+          phase: 'scoreboard',
+          question_id: 10,
+          correct_answer_ids: [11],
+          players: [{ id: 'p1', nickname: 'Alice', score: 900 }],
+        },
+      }),
+    });
+    expect(state.snapshot?.phase).toBe('scoreboard');
+    expect(state.snapshot?.question_closes_at).toBeUndefined();
+    expect(state.snapshot?.current_question?.id).toBe(10);
+    expect(state.snapshot?.correct_answer_ids).toEqual([11]);
+    expect(state.lastQuestionClosed?.question_id).toBe(10);
+  });
 });

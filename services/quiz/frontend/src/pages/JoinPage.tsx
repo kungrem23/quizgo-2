@@ -94,12 +94,15 @@ export function JoinPage() {
   }
 
   return (
-    <main className="game-foundation-page">
-      <div className="game-foundation-card">
+    <main className="game-foundation-page join-game-page">
+      <div className="join-game-brand">
         <Brand />
+        <span>Для любопытных умов</span>
+      </div>
+      <div className="game-foundation-card join-game-card">
         <div>
           <h1>Присоединиться к игре</h1>
-          <p>Введите код с экрана ведущего и никнейм.</p>
+          <p>Введите код с экрана ведущего и придумайте никнейм.</p>
         </div>
         {error && <ErrorBox message={error} />}
         <form className="game-foundation-form" onSubmit={(event) => void submit(event)}>
@@ -113,19 +116,26 @@ export function JoinPage() {
               maxLength={6}
               placeholder="ABC123"
               disabled={busy}
+              className="join-code-input"
             />
           </label>
           <label>
-            Никнейм
+            <span className="join-nickname-label">
+              Никнейм <span>{nickname.length}/30</span>
+            </span>
             <input
               value={nickname}
               onChange={(event) => setNickname(event.target.value)}
+              aria-label="Никнейм"
               autoComplete="nickname"
               maxLength={30}
               placeholder="Как вас зовут?"
               disabled={busy}
             />
           </label>
+          <p className="join-game-hint">
+            Комната и никнейм проверяются вместе при подключении к игре.
+          </p>
           <Button type="submit" busy={busy}>
             Войти в игру
           </Button>
