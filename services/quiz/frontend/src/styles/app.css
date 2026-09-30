@@ -3637,7 +3637,7 @@ svg {
   top: 22px;
   left: 32px;
 }
-.countdown-content {
+/* .countdown-content {
   z-index: 1;
   width: min(100%, 720px);
   display: grid;
@@ -3659,7 +3659,35 @@ svg {
   font-size: 112px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+} */
+
+.countdown-content {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
 }
+
+.countdown-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  width: 220px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+  border: 8px solid #7047eb;
+  border-radius: 50%;
+  color: #7047eb;
+  background: #fff;
+  box-shadow: 0 12px 34px rgb(112 71 235 / 16%);
+  font-size: 112px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .countdown-value.is-expired {
   border-color: #d8d3e7;
   color: #858198;
