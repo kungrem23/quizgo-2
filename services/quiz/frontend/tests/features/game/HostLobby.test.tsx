@@ -42,9 +42,13 @@ function deferred<T>() {
 }
 
 describe('host lobby', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
 
   beforeEach(() => {
+    vi.stubEnv('VITE_GAME_ORIGIN', 'https://game.example.com');
     mocks.sendCommand.mockReset();
     mocks.session.game.snapshot.players = [];
   });
@@ -55,7 +59,7 @@ describe('host lobby', () => {
     expect(
       (screen.getByRole('button', { name: 'Начать игру' }) as HTMLButtonElement).disabled,
     ).toBe(true);
-    expect(screen.getByTestId('qr').textContent).toContain('/join/ABC123');
+    expect(screen.getByTestId('qr').textContent).toBe('https://game.example.com/join/ABC123');
   });
 
   it('locks lobby commands while start is pending', async () => {

@@ -1,3 +1,10 @@
 {$DOMAIN} {
 	reverse_proxy frontend:80
 }
+
+{$GAME_DOMAIN} {
+	@root path /
+	redir @root /join 302
+
+	reverse_proxy frontend:80
+}

@@ -11,6 +11,7 @@ services:
     logging: *default-logging
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      GAME_DOMAIN: ${GAME_DOMAIN:?Set GAME_DOMAIN in .env}
     ports:
       - "80:80"
       - "443:443"
@@ -146,6 +147,8 @@ services:
   frontend:
     build:
       context: ./services/quiz/frontend
+      args:
+        VITE_GAME_ORIGIN: https://${GAME_DOMAIN:?Set GAME_DOMAIN in .env}
     restart: unless-stopped
     logging: *default-logging
     ports:

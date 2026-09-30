@@ -5,6 +5,7 @@ import { useGameSession } from './GameSession';
 import { GameCommandError } from './socket';
 import type { GamePlayer } from './types';
 import { JoinQRCode } from './JoinQRCode';
+import { gameJoinURL } from './urls';
 
 const avatarTones = ['red', 'blue', 'amber', 'purple', 'green', 'pink', 'teal'];
 
@@ -62,10 +63,7 @@ export function HostLobby() {
   const [pendingStart, setPendingStart] = useState(false);
   const [removing, setRemoving] = useState<Set<string>>(() => new Set());
   const [commandErrorMessage, setCommandErrorMessage] = useState('');
-  const joinURL = useMemo(
-    () => `${window.location.origin}/join/${encodeURIComponent(snapshot.code)}`,
-    [snapshot.code],
-  );
+  const joinURL = useMemo(() => gameJoinURL(snapshot.code), [snapshot.code]);
   const anyCommandPending = pendingStart || removing.size > 0;
   const connected = status.state === 'open';
 
