@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 4px 16px rgba(33, 27, 61, 0.05)); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <!-- Хедер -->
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  <text x="64" y="44" class="bold" font-size="24" fill="#7047EB">QuizGo</text>
+  <rect x="180" y="22" width="220" height="32" rx="8" fill="#F0EDFB"/>
+  <text x="192" y="43" class="bold tnum" font-size="16" fill="#7047EB">Код: Q7M4K2</text>
+  
+  <text x="1080" y="44" class="semi" font-size="15" fill="#211B3D">8 игроков подключилось</text>
+  <rect x="1260" y="16" width="132" height="40" rx="10" fill="#7047EB"/>
+  <text x="1326" y="41" class="semi" font-size="14" fill="#FFFFFF" text-anchor="middle">Начать игру ▶</text>
+
+  <!-- Сетка карточек игроков -->
+  <g class="shadow" transform="translate(120, 120)">
+    <!-- Игрок 1 -->
+    <rect x="0" y="0" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="36" cy="32" r="18" fill="#FFEBEB"/>
+    <text x="36" y="38" class="bold" font-size="14" fill="#E5484D" text-anchor="middle">A</text>
+    <text x="68" y="38" class="semi" font-size="15" fill="#211B3D">Alex_Fox</text>
+
+    <!-- Игрок 2 -->
+    <rect x="300" y="0" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="336" cy="32" r="18" fill="#EDF2FE"/>
+    <text x="336" y="38" class="bold" font-size="14" fill="#2F68EE" text-anchor="middle">D</text>
+    <text x="368" y="38" class="semi" font-size="15" fill="#211B3D">Dmitry_K</text>
+
+    <!-- Игрок 3 -->
+    <rect x="600" y="0" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="636" cy="32" r="18" fill="#FEF3C7"/>
+    <text x="636" y="38" class="bold" font-size="14" fill="#D97706" text-anchor="middle">E</text>
+    <text x="668" y="38" class="semi" font-size="15" fill="#211B3D">Elena_V</text>
+
+    <!-- Игрок 4 (Подсвечен как только что вошедший) -->
+    <rect x="900" y="0" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#7047EB" stroke-width="2"/>
+    <circle cx="936" cy="32" r="18" fill="#F0EDFB"/>
+    <text x="936" y="38" class="bold" font-size="14" fill="#7047EB" text-anchor="middle">M</text>
+    <text x="968" y="38" class="semi" font-size="15" fill="#211B3D">MaxPower</text>
+
+    <!-- Игрок 5 -->
+    <rect x="0" y="90" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="36" cy="122" r="18" fill="#DCFCE7"/>
+    <text x="36" y="128" class="bold" font-size="14" fill="#16A34A" text-anchor="middle">S</text>
+    <text x="68" y="128" class="semi" font-size="15" fill="#211B3D">Svetlana</text>
+
+    <!-- Игрок 6 -->
+    <rect x="300" y="90" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="336" cy="122" r="18" fill="#FCE7F3"/>
+    <text x="336" y="128" class="bold" font-size="14" fill="#DB2777" text-anchor="middle">K</text>
+    <text x="368" y="128" class="semi" font-size="15" fill="#211B3D">Kotik_99</text>
+
+    <!-- Игрок 7 -->
+    <rect x="600" y="90" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="636" cy="122" r="18" fill="#F0EDFB"/>
+    <text x="636" y="128" class="bold" font-size="14" fill="#7047EB" text-anchor="middle">P</text>
+    <text x="668" y="128" class="semi" font-size="15" fill="#211B3D">Pavel_Phys</text>
+
+    <!-- Игрок 8 -->
+    <rect x="900" y="90" width="270" height="64" rx="12" fill="#FFFFFF" stroke="#E2DFED"/>
+    <circle cx="936" cy="122" r="18" fill="#CCFBF1"/>
+    <text x="936" y="128" class="bold" font-size="14" fill="#0D9488" text-anchor="middle">O</text>
+    <text x="968" y="128" class="semi" font-size="15" fill="#211B3D">Oleg_N</text>
+  </g>
+</svg>

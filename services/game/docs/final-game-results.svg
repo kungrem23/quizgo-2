@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 6px 24px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  <text x="64" y="44" class="bold" font-size="24" fill="#7047EB">QuizGo</text>
+  <text x="180" y="44" class="bold" font-size="18" fill="#211B3D">Финальные результаты</text>
+
+  <!-- Пьедестал -->
+  <!-- 2 место (Серебро) -->
+  <g class="shadow" transform="translate(360, 260)">
+    <circle cx="120" cy="50" r="36" fill="#FFFFFF" stroke="#E2DFED" stroke-width="2"/>
+    <text x="120" y="58" class="bold" font-size="24" fill="#211B3D" text-anchor="middle">E</text>
+    <text x="120" y="115" class="bold" font-size="18" fill="#211B3D" text-anchor="middle">Elena_V</text>
+    <text x="120" y="140" class="semi tnum" font-size="15" fill="#7047EB" text-anchor="middle">8 120 очков</text>
+    <rect x="20" y="160" width="200" height="200" rx="16" fill="#E2DFED"/>
+    <text x="120" y="270" class="bold" font-size="64" fill="#FFFFFF" text-anchor="middle">2</text>
+  </g>
+
+  <!-- 1 место (Золото) -->
+  <g class="shadow" transform="translate(600, 170)">
+    <text x="120" y="0" class="bold" font-size="32" text-anchor="middle">👑</text>
+    <circle cx="120" cy="60" r="44" fill="#FFFFFF" stroke="#FEF3C7" stroke-width="3"/>
+    <text x="120" y="70" class="bold" font-size="30" fill="#D97706" text-anchor="middle">M</text>
+    <text x="120" y="135" class="bold" font-size="22" fill="#211B3D" text-anchor="middle">MaxPower</text>
+    <text x="120" y="165" class="bold tnum" font-size="18" fill="#7047EB" text-anchor="middle">9 450 очков</text>
+    <rect x="10" y="190" width="220" height="290" rx="16" fill="#7047EB"/>
+    <text x="120" y="340" class="bold" font-size="80" fill="#FFFFFF" text-anchor="middle">1</text>
+  </g>
+
+  <!-- 3 место (Бронза) -->
+  <g class="shadow" transform="translate(860, 310)">
+    <circle cx="120" cy="50" r="36" fill="#FFFFFF" stroke="#E2DFED" stroke-width="2"/>
+    <text x="120" y="58" class="bold" font-size="24" fill="#211B3D" text-anchor="middle">A</text>
+    <text x="120" y="115" class="bold" font-size="18" fill="#211B3D" text-anchor="middle">Alex_Fox</text>
+    <text x="120" y="140" class="semi tnum" font-size="15" fill="#7047EB" text-anchor="middle">7 690 очков</text>
+    <rect x="20" y="160" width="200" height="150" rx="16" fill="#E2DFED" opacity="0.8"/>
+    <text x="120" y="245" class="bold" font-size="64" fill="#FFFFFF" text-anchor="middle">3</text>
+  </g>
+
+  <!-- Кнопки завершения -->
+  <rect x="490" y="770" width="220" height="52" rx="12" fill="#7047EB"/>
+  <text x="600" y="802" class="semi" font-size="16" fill="#FFFFFF" text-anchor="middle">Сыграть ещё раз</text>
+
+  <rect x="730" y="770" width="220" height="52" rx="12" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1.5"/>
+  <text x="840" y="802" class="medium" font-size="16" fill="#211B3D" text-anchor="middle">Вернуться к квизам</text>
+</svg>

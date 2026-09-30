@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <!-- Декоративные орбиты QuizGo -->
+  <circle cx="720" cy="450" r="320" fill="none" stroke="#E2DFED" stroke-width="2" stroke-dasharray="10 10"/>
+  <circle cx="720" cy="450" r="220" fill="none" stroke="#B5A1F8" stroke-width="1.5"/>
+
+  <!-- Цифра отсчета -->
+  <circle cx="720" cy="450" r="110" fill="#FFFFFF" stroke="#7047EB" stroke-width="8"/>
+  <text x="720" y="495" class="bold" font-size="120" fill="#7047EB" text-anchor="middle">3</text>
+
+  <!-- Подсказка -->
+  <text x="720" y="640" class="bold" font-size="28" fill="#211B3D" text-anchor="middle">Приготовьтесь к первому вопросу!</text>
+  <text x="720" y="680" class="medium" font-size="18" fill="#858198" text-anchor="middle">Быстрый ответ приносит больше очков</text>
+</svg>

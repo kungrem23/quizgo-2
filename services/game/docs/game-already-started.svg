@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .shadow { filter: drop-shadow(0 4px 16px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <!-- Логотип -->
+  <text x="195" y="100" class="bold" font-size="28" fill="#7047EB" text-anchor="middle">QuizGo</text>
+
+  <!-- Карточка ошибки -->
+  <g class="shadow" transform="translate(24, 170)">
+    <rect width="342" height="400" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Иконка запрета / закрытого доступа -->
+    <circle cx="171" cy="80" r="40" fill="#FFEBEB"/>
+    <text x="171" y="93" class="bold" font-size="34" fill="#E84D66" text-anchor="middle">🔒</text>
+
+    <text x="171" y="160" class="bold" font-size="22" fill="#211B3D" text-anchor="middle">Игра уже началась</text>
+    <text x="171" y="195" class="regular" font-size="15" fill="#858198" text-anchor="middle">
+      <tspan x="171" dy="0">К сожалению, в эту комнату</tspan>
+      <tspan x="171" dy="24">уже нельзя присоединиться.</tspan>
+    </text>
+
+    <!-- Пояснительный бейдж -->
+    <rect x="36" y="240" width="270" height="44" rx="8" fill="#F7F7FC"/>
+    <text x="171" y="267" class="medium" font-size="13" fill="#858198" text-anchor="middle">Код комнаты: Q7M4K2</text>
+
+    <!-- Кнопка возврата к вводу кода -->
+    <rect x="24" y="316" width="294" height="52" rx="12" fill="#7047EB"/>
+    <text x="171" y="348" class="semi" font-size="16" fill="#FFFFFF" text-anchor="middle">Ввести другой код</text>
+  </g>
+
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

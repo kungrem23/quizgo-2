@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 6px 20px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <!-- Линейный таймер на нуле -->
+  <rect x="0" y="44" width="390" height="6" fill="#E84D66"/>
+
+  <g class="shadow" transform="translate(24, 130)">
+    <rect width="342" height="520" rx="20" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Иконка песочных часов / времени -->
+    <circle cx="171" cy="80" r="40" fill="#FEF3C7"/>
+    <text x="171" y="92" class="bold" font-size="34" fill="#D97706" text-anchor="middle">⏳</text>
+
+    <text x="171" y="155" class="bold" font-size="24" fill="#211B3D" text-anchor="middle">Время вышло!</text>
+    <text x="171" y="185" class="medium" font-size="14" fill="#858198" text-anchor="middle">Вы не успели выбрать вариант</text>
+    
+    <text x="171" y="225" class="bold tnum" font-size="32" fill="#858198" text-anchor="middle">+0</text>
+
+    <!-- Карточка с правильным ответом -->
+    <rect x="24" y="260" width="294" height="84" rx="14" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <text x="40" y="288" class="medium" font-size="12" fill="#858198">Правильный ответ:</text>
+    <text x="40" y="322" class="bold" font-size="17" fill="#E5484D">▲ Фотоэффект</text>
+
+    <text x="171" y="380" class="regular" font-size="14" fill="#858198" text-anchor="middle">В следующем вопросе будьте быстрее</text>
+
+    <line x1="30" y1="420" x2="312" y2="420" stroke="#E2DFED" stroke-width="1"/>
+
+    <text x="171" y="460" class="medium" font-size="15" fill="#211B3D" text-anchor="middle">Ждём, пока ведущий покажет счёт…</text>
+    <circle cx="171" cy="485" r="4" fill="#7047EB"/>
+  </g>
+
+  <!-- Индикатор Home bar -->
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

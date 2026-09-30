@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 4px 20px rgba(33, 27, 61, 0.06)); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <!-- Хедер -->
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  <text x="64" y="44" class="bold" font-size="24" fill="#7047EB">QuizGo</text>
+  <text x="180" y="44" class="semi" font-size="16" fill="#211B3D">Квантовая физика для начинающих</text>
+  
+  <circle cx="1190" cy="36" r="5" fill="#28A745"/>
+  <text x="1205" y="41" class="medium" font-size="14" fill="#858198">Подключено</text>
+  <text x="1330" y="41" class="medium" font-size="14" fill="#E84D66">Завершить</text>
+
+  <!-- Инфо-карточка подключения -->
+  <g class="shadow" transform="translate(180, 120)">
+    <rect width="1080" height="260" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <text x="48" y="60" class="medium" font-size="16" fill="#858198">Откройте на телефоне <tspan fill="#7047EB" class="semi">quizgo.ru/join</tspan> и введите код:</text>
+    <text x="48" y="160" class="bold tnum" font-size="88" letter-spacing="8" fill="#7047EB">Q7M4K2</text>
+    
+    <!-- QR код заглушка -->
+    <rect x="840" y="30" width="200" height="200" rx="12" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <rect x="860" y="50" width="50" height="50" fill="#211B3D"/>
+    <rect x="970" y="50" width="50" height="50" fill="#211B3D"/>
+    <rect x="860" y="160" width="50" height="50" fill="#211B3D"/>
+    <rect x="930" y="120" width="30" height="30" fill="#7047EB"/>
+    <rect x="980" y="170" width="40" height="40" fill="#211B3D"/>
+  </g>
+
+  <!-- Состояние "Ждем игроков" -->
+  <g transform="translate(180, 420)">
+    <rect width="1080" height="320" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1" stroke-dasharray="6 6"/>
+    
+    <!-- Пульсирующий элемент -->
+    <circle cx="540" cy="110" r="32" fill="#F0EDFB"/>
+    <circle cx="540" cy="110" r="14" fill="#7047EB"/>
+
+    <text x="540" y="180" class="bold" font-size="22" fill="#211B3D" text-anchor="middle">Ждём участников…</text>
+    <text x="540" y="210" class="regular" font-size="15" fill="#858198" text-anchor="middle">Подключитесь по коду выше, чтобы начать викторину (0 из 100 игроков)</text>
+
+    <!-- Disabled кнопка старта -->
+    <rect x="420" y="240" width="240" height="50" rx="12" fill="#E2DFED"/>
+    <text x="540" y="271" class="semi" font-size="15" fill="#858198" text-anchor="middle">Начать игру</text>
+  </g>
+</svg>

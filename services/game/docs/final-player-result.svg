@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 6px 24px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <text x="195" y="80" class="bold" font-size="28" fill="#7047EB" text-anchor="middle">QuizGo</text>
+
+  <g class="shadow" transform="translate(24, 120)">
+    <rect width="342" height="560" rx="20" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <text x="171" y="60" class="bold" font-size="44" text-anchor="middle">🏆</text>
+    <text x="171" y="115" class="bold" font-size="24" fill="#211B3D" text-anchor="middle">Великолепная игра!</text>
+    <text x="171" y="145" class="semi" font-size="16" fill="#7047EB" text-anchor="middle">Вы заняли 1 место</text>
+
+    <!-- Плашка очков -->
+    <rect x="24" y="175" width="294" height="110" rx="14" fill="#F0EDFB"/>
+    <text x="171" y="215" class="medium" font-size="14" fill="#7047EB" text-anchor="middle">Итоговый счёт</text>
+    <text x="171" y="265" class="bold tnum" font-size="44" fill="#7047EB" text-anchor="middle">9 450</text>
+
+    <!-- Статистика -->
+    <g transform="translate(24, 310)">
+      <text x="0" y="25" class="regular" font-size="14" fill="#858198">Правильных ответов</text>
+      <text x="294" y="25" class="bold tnum" font-size="16" fill="#211B3D" text-anchor="end">9 из 10</text>
+
+      <line x1="0" y1="45" x2="294" y2="45" stroke="#E2DFED" stroke-width="1"/>
+
+      <text x="0" y="75" class="regular" font-size="14" fill="#858198">Лучшая серия</text>
+      <text x="294" y="75" class="bold tnum" font-size="16" fill="#211B3D" text-anchor="end">5 подряд 🔥</text>
+    </g>
+
+    <!-- Кнопка на главную -->
+    <rect x="24" y="470" width="294" height="52" rx="12" fill="#7047EB"/>
+    <text x="171" y="502" class="semi" font-size="16" fill="#FFFFFF" text-anchor="middle">На главную</text>
+  </g>
+
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

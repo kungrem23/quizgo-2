@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 4px 16px rgba(33, 27, 61, 0.08)); }
+    </style>
+  </defs>
+
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <!-- Логотип -->
+  <text x="195" y="110" class="bold" font-size="32" fill="#7047EB" text-anchor="middle">QuizGo</text>
+  <text x="195" y="135" class="medium" font-size="14" fill="#858198" text-anchor="middle">Для любопытных умов</text>
+
+  <!-- Карточка формы -->
+  <g class="shadow" transform="translate(24, 180)">
+    <rect width="342" height="340" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <text x="24" y="44" class="bold" font-size="20" fill="#211B3D">Присоединиться к игре</text>
+    <text x="24" y="70" class="regular" font-size="14" fill="#858198">Введите шестизначный код с экрана</text>
+
+    <!-- 6 раздельных ячеек PIN -->
+    <g transform="translate(24, 105)">
+      <rect x="0" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#7047EB" stroke-width="2"/>
+      <text x="22" y="36" class="bold tnum" font-size="24" fill="#7047EB" text-anchor="middle">Q</text>
+
+      <rect x="50" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#7047EB" stroke-width="2"/>
+      <text x="72" y="36" class="bold tnum" font-size="24" fill="#7047EB" text-anchor="middle">7</text>
+
+      <rect x="100" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#E2DFED"/>
+      <text x="122" y="36" class="bold tnum" font-size="24" fill="#211B3D" text-anchor="middle">M</text>
+
+      <rect x="150" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#E2DFED"/>
+      <rect x="200" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#E2DFED"/>
+      <rect x="250" y="0" width="44" height="54" rx="8" fill="#F7F7FC" stroke="#E2DFED"/>
+    </g>
+
+    <!-- Кнопка вставки из буфера -->
+    <text x="171" y="195" class="medium" font-size="13" fill="#7047EB" text-anchor="middle">📋 Вставить код из буфера</text>
+
+    <!-- Кнопка подтверждения -->
+    <rect x="24" y="240" width="294" height="52" rx="12" fill="#7047EB"/>
+    <text x="171" y="272" class="semi" font-size="16" fill="#FFFFFF" text-anchor="middle">Продолжить</text>
+  </g>
+
+  <!-- Индикатор безопасной зоны iOS -->
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

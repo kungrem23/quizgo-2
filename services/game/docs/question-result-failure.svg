@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 6px 20px rgba(232, 77, 102, 0.1)); }
+    </style>
+  </defs>
+
+  <rect width="390" height="844" fill="#FFEBEB"/>
+
+  <g class="shadow" transform="translate(24, 150)">
+    <rect width="342" height="480" rx="20" fill="#FFFFFF"/>
+    
+    <!-- Иконка промаха -->
+    <circle cx="171" cy="80" r="40" fill="#FFEBEB"/>
+    <text x="171" y="93" class="bold" font-size="34" fill="#E84D66" text-anchor="middle">✕</text>
+
+    <text x="171" y="160" class="bold" font-size="24" fill="#211B3D" text-anchor="middle">В этот раз не угадали</text>
+    <text x="171" y="200" class="bold tnum" font-size="36" fill="#858198" text-anchor="middle">+0</text>
+
+    <!-- Правильный ответ -->
+    <rect x="30" y="240" width="282" height="74" rx="12" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <text x="44" y="265" class="medium" font-size="12" fill="#858198">Правильный вариант:</text>
+    <text x="44" y="295" class="bold" font-size="16" fill="#E5484D">▲ Фотоэффект</text>
+
+    <text x="171" y="360" class="regular" font-size="14" fill="#858198" text-anchor="middle">Не расстраивайтесь, впереди ещё 7 вопросов!</text>
+
+    <line x1="40" y1="400" x2="302" y2="400" stroke="#E2DFED" stroke-width="1"/>
+    <text x="171" y="440" class="semi" font-size="15" fill="#211B3D" text-anchor="middle">Текущее место: <tspan class="bold">3</tspan></text>
+  </g>
+
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

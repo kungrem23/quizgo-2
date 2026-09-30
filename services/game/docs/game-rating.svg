@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .shadow { filter: drop-shadow(0 4px 16px rgba(33, 27, 61, 0.05)); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <!-- Хедер -->
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  <text x="64" y="44" class="bold" font-size="24" fill="#7047EB">QuizGo</text>
+  <text x="180" y="44" class="bold" font-size="18" fill="#211B3D">Таблица лидеров — Вопрос 3 из 10</text>
+  
+  <rect x="1230" y="16" width="160" height="40" rx="10" fill="#7047EB"/>
+  <text x="1310" y="41" class="semi" font-size="14" fill="#FFFFFF" text-anchor="middle">Следующий ▶</text>
+
+  <!-- Таблица ТОП-5 -->
+  <g class="shadow" transform="translate(240, 130)">
+    <!-- Строка 1 -->
+    <rect x="0" y="0" width="960" height="76" rx="14" fill="#FFFFFF" stroke="#7047EB" stroke-width="1.5"/>
+    <text x="40" y="47" class="bold tnum" font-size="22" fill="#7047EB">1</text>
+    <text x="100" y="46" class="bold" font-size="18" fill="#211B3D">MaxPower</text>
+    <rect x="220" y="24" width="70" height="28" rx="14" fill="#FEF3C7"/>
+    <text x="255" y="43" class="semi" font-size="12" fill="#D97706" text-anchor="middle">🔥 3 в ряд</text>
+    <text x="820" y="46" class="bold tnum" font-size="20" fill="#211B3D">2 840 очков</text>
+    <text x="910" y="46" class="semi" font-size="14" fill="#16A34A">▲ +2</text>
+
+    <!-- Строка 2 -->
+    <rect x="0" y="96" width="960" height="76" rx="14" fill="#FFFFFF" stroke="#E2DFED"/>
+    <text x="40" y="143" class="bold tnum" font-size="22" fill="#858198">2</text>
+    <text x="100" y="142" class="bold" font-size="18" fill="#211B3D">Elena_V</text>
+    <text x="820" y="142" class="bold tnum" font-size="20" fill="#211B3D">2 610 очков</text>
+    <text x="910" y="142" class="semi" font-size="14" fill="#858198">—</text>
+
+    <!-- Строка 3 -->
+    <rect x="0" y="192" width="960" height="76" rx="14" fill="#FFFFFF" stroke="#E2DFED"/>
+    <text x="40" y="239" class="bold tnum" font-size="22" fill="#858198">3</text>
+    <text x="100" y="238" class="bold" font-size="18" fill="#211B3D">Alex_Fox</text>
+    <text x="820" y="238" class="bold tnum" font-size="20" fill="#211B3D">2 450 очков</text>
+    <text x="910" y="238" class="semi" font-size="14" fill="#E84D66">▼ -2</text>
+
+    <!-- Строка 4 -->
+    <rect x="0" y="288" width="960" height="76" rx="14" fill="#FFFFFF" stroke="#E2DFED"/>
+    <text x="40" y="335" class="bold tnum" font-size="22" fill="#858198">4</text>
+    <text x="100" y="334" class="bold" font-size="18" fill="#211B3D">Pavel_Phys</text>
+    <text x="820" y="334" class="bold tnum" font-size="20" fill="#211B3D">1 890 очков</text>
+    <text x="910" y="334" class="semi" font-size="14" fill="#16A34A">▲ +1</text>
+
+    <!-- Строка 5 -->
+    <rect x="0" y="384" width="960" height="76" rx="14" fill="#FFFFFF" stroke="#E2DFED"/>
+    <text x="40" y="431" class="bold tnum" font-size="22" fill="#858198">5</text>
+    <text x="100" y="430" class="bold" font-size="18" fill="#211B3D">Kotik_99</text>
+    <text x="820" y="430" class="bold tnum" font-size="20" fill="#211B3D">1 720 очков</text>
+    <text x="910" y="430" class="semi" font-size="14" fill="#858198">—</text>
+  </g>
+
+  <!-- Инфо-подвал -->
+  <text x="720" y="690" class="medium" font-size="16" fill="#858198" text-anchor="middle">Ещё 19 игроков продолжают борьбу</text>
+</svg>

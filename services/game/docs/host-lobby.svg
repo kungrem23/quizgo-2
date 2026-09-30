@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .regular { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+      .shadow { filter: drop-shadow(0 4px 20px rgba(33, 27, 61, 0.06)); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F7FC"/>
+
+  <!-- Навбар -->
+  <rect width="1440" height="72" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+  <text x="64" y="44" class="bold" font-size="24" fill="#7047EB">QuizGo</text>
+  <text x="1280" y="43" class="medium" font-size="15" fill="#858198">Мой кабинет</text>
+
+  <!-- Карточка просмотра квиза -->
+  <g class="shadow" transform="translate(240, 140)">
+    <rect width="960" height="620" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Бейджи метаданных -->
+    <rect x="48" y="48" width="105" height="28" rx="14" fill="#F0EDFB"/>
+    <text x="62" y="67" class="semi" font-size="13" fill="#7047EB">10 вопросов</text>
+
+    <rect x="165" y="48" width="85" height="28" rx="14" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <text x="180" y="67" class="medium" font-size="13" fill="#858198">~15 мин</text>
+
+    <text x="48" y="130" class="bold" font-size="34" fill="#211B3D">Квантовая физика для начинающих</text>
+    <text x="48" y="170" class="regular" font-size="16" fill="#858198">Интерактивная викторина для проверки базовых понятий корпускулярно-волнового дуализма.</text>
+
+    <!-- Разделитель -->
+    <line x1="48" y1="220" x2="912" y2="220" stroke="#E2DFED" stroke-width="1"/>
+
+    <!-- Блок запуска игры -->
+    <rect x="48" y="260" width="864" height="220" rx="14" fill="#F7F7FC" stroke="#E2DFED" stroke-width="1"/>
+    <text x="80" y="315" class="bold" font-size="20" fill="#211B3D">Синхронная игра в реальном времени</text>
+    <text x="80" y="345" class="regular" font-size="15" fill="#858198">Участники подключаются со смартфонов по 6-значному коду или QR-коду.</text>
+
+    <!-- Основная кнопка -->
+    <rect x="80" y="385" width="220" height="54" rx="12" fill="#7047EB"/>
+    <text x="190" y="419" class="semi" font-size="16" fill="#FFFFFF" text-anchor="middle">Запустить игру ▶</text>
+
+    <!-- Вторичная кнопка -->
+    <rect x="316" y="385" width="160" height="54" rx="12" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1.5"/>
+    <text x="396" y="419" class="medium" font-size="16" fill="#211B3D" text-anchor="middle">Предпросмотр</text>
+
+    <!-- Футер-подсказка -->
+    <text x="48" y="540" class="regular" font-size="14" fill="#858198">Редактирование квиза в кабинете не повлияет на запущенную сессию.</text>
+  </g>
+</svg>
