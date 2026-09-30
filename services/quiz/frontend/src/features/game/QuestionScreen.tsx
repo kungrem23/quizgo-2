@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { Clock3, Wifi } from 'lucide-react';
 import { QuizImage } from '../../shared/ui/QuizImage';
 import { AnswerGrid } from './AnswerGrid';
-import { deadlineProgress, useDeadline } from './deadline';
+import { deadlineProgress, useDeadline, type DeadlineState } from './deadline';
 import { GameCommandError, type GameSocketStatus, type PendingGameCommand } from './socket';
 import type { GameCommand, GameStateSnapshot } from './types';
 
@@ -62,14 +62,15 @@ function QuestionCard({ snapshot }: { snapshot: GameStateSnapshot }) {
 function QuestionShell({
   snapshot,
   status,
+  deadline,
   children,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
+  deadline: DeadlineState;
   children: React.ReactNode;
 }) {
   const question = snapshot.current_question!;
-  const deadline = useDeadline(snapshot.question_closes_at);
   const progress = deadlineProgress(deadline.remainingMs, question.time_limit_seconds);
   const timerStyle = { '--question-time-progress': `${progress}%` } as CSSProperties;
 
@@ -106,8 +107,9 @@ export function HostQuestionScreen({
   answeredPlayerIds: string[] | null;
 }) {
   const question = snapshot.current_question!;
+  const deadline = useDeadline(snapshot.question_closes_at);
   return (
-    <QuestionShell snapshot={snapshot} status={status}>
+    <QuestionShell snapshot={snapshot} status={status} deadline={deadline}>
       <div className="host-answer-progress" aria-live="polite">
         <strong>{answeredPlayerIds === null ? '—' : answeredPlayerIds.length}</strong>
         <span>из {snapshot.players.length} игроков ответили</span>
@@ -169,7 +171,7 @@ export function PlayerQuestionScreen({
   }
 
   return (
-    <QuestionShell snapshot={snapshot} status={status}>
+    <QuestionShell snapshot={snapshot} status={status} deadline={deadline}>
       <p className="player-answer-instruction">
         {accepted
           ? 'Ответ принят. Ожидаем завершения вопроса.'

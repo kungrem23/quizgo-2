@@ -44,36 +44,51 @@ class TestWebSocket extends EventTarget {
   }
 }
 
-function snapshot(phase: 'lobby' | 'countdown') {
+function snapshot(phase: 'lobby' | 'countdown', questionIndex = 0) {
   return {
     game_id: 'game-1',
     code: 'ABC123',
     quiz_title: 'Физика',
     phase,
     players: [{ id: 'player-1', nickname: 'Alice', score: 0 }],
-    current_question_index: phase === 'countdown' ? 0 : -1,
-    ...(phase === 'countdown' ? { countdown_ends_at: '2026-09-30T17:00:03Z' } : {}),
+    current_question_index: phase === 'countdown' ? questionIndex : -1,
+    ...(phase === 'countdown' ? { countdown_ends_at: '2099-09-30T17:00:03Z' } : {}),
   };
 }
 
-function openQuestionSnapshot() {
+function openQuestionSnapshot(questionIndex = 0) {
+  const questionID = 10 + questionIndex;
   return {
     game_id: 'game-1',
     code: 'ABC123',
     quiz_title: 'Физика',
     phase: 'question_open',
     players: [{ id: 'player-1', nickname: 'Alice', score: 0 }],
-    current_question_index: 0,
+    current_question_index: questionIndex,
     current_question: {
-      id: 10,
-      text: 'Какой ответ правильный?',
+      id: questionID,
+      text: `Вопрос ${questionIndex + 1}?`,
       time_limit_seconds: 30,
       answers: [
-        { id: 11, text: 'Первый вариант' },
-        { id: 12, text: 'Второй вариант' },
+        { id: questionID * 10 + 1, text: 'Первый вариант' },
+        { id: questionID * 10 + 2, text: 'Второй вариант' },
       ],
     },
     question_closes_at: '2099-09-30T17:00:30Z',
+  };
+}
+
+function closedQuestion(questionIndex: number, phase: 'scoreboard' | 'finished') {
+  const questionID = 10 + questionIndex;
+  return {
+    type: 'question_closed',
+    sequence: 4 + questionIndex * 3,
+    payload: {
+      phase,
+      question_id: questionID,
+      correct_answer_ids: [questionID * 10 + 1],
+      players: [{ id: 'player-1', nickname: 'Alice', score: 0 }],
+    },
   };
 }
 
@@ -89,7 +104,7 @@ describe('player join route flow', () => {
     vi.unstubAllGlobals();
   });
 
-  it('joins, persists credentials, reauthenticates and leaves lobby after host start', async () => {
+  it('joins and follows the host through three authoritative questions', async () => {
     const router = createMemoryRouter(
       [
         { path: '/join', element: <JoinPage /> },
@@ -237,38 +252,143 @@ describe('player join route flow', () => {
       gameSocket.receive({
         type: 'question_opened',
         sequence: 3,
-        payload: openQuestionSnapshot(),
+        payload: openQuestionSnapshot(0),
       });
       hostSocket.receive({
         type: 'question_opened',
         sequence: 3,
-        payload: openQuestionSnapshot(),
+        payload: openQuestionSnapshot(0),
       });
     });
     expect(
       await within(playerView.container).findByRole('heading', {
-        name: 'Какой ответ правильный?',
+        name: 'Вопрос 1?',
       }),
     ).toBeTruthy();
     expect(within(playerView.container).getAllByRole('button')).toHaveLength(2);
 
     act(() => {
-      const closed = {
-        type: 'question_closed',
-        sequence: 4,
-        payload: {
-          phase: 'scoreboard',
-          question_id: 10,
-          correct_answer_ids: [11],
-          players: [{ id: 'player-1', nickname: 'Alice', score: 0 }],
-        },
-      };
+      const closed = closedQuestion(0, 'scoreboard');
       gameSocket.receive(closed);
       hostSocket.receive(closed);
     });
-    expect(await within(playerView.container).findByText('scoreboard')).toBeTruthy();
     expect(
-      within(playerView.container).queryByRole('heading', { name: 'Какой ответ правильный?' }),
+      await within(playerView.container).findByText(
+        'Ждём, пока ведущий запустит следующий вопрос.',
+      ),
+    ).toBeTruthy();
+    expect(within(playerView.container).queryByRole('heading', { name: 'Вопрос 1?' })).toBeNull();
+
+    await user.click(
+      await within(hostView.container).findByRole('button', { name: 'Следующий вопрос' }),
+    );
+    const firstNextMessage = hostSocket.sent[2];
+    expect(firstNextMessage).toEqual(expect.objectContaining({ type: 'next' }));
+    act(() => {
+      gameSocket.receive({
+        type: 'countdown_started',
+        sequence: 5,
+        payload: snapshot('countdown', 1),
+      });
+      hostSocket.receive({
+        type: 'countdown_started',
+        sequence: 5,
+        payload: snapshot('countdown', 1),
+      });
+      hostSocket.receive({
+        type: 'command_accepted',
+        request_id: firstNextMessage.request_id,
+        sequence: 5,
+        payload: { duplicate: false },
+      });
+    });
+    expect(
+      await within(playerView.container).findByText('Приготовьтесь к вопросу 2!'),
+    ).toBeTruthy();
+
+    act(() => {
+      gameSocket.receive({
+        type: 'question_opened',
+        sequence: 6,
+        payload: openQuestionSnapshot(1),
+      });
+      hostSocket.receive({
+        type: 'question_opened',
+        sequence: 6,
+        payload: openQuestionSnapshot(1),
+      });
+    });
+    expect(
+      await within(playerView.container).findByRole('heading', { name: 'Вопрос 2?' }),
+    ).toBeTruthy();
+
+    act(() => {
+      const closed = closedQuestion(1, 'scoreboard');
+      gameSocket.receive(closed);
+      hostSocket.receive(closed);
+    });
+    await user.click(
+      await within(hostView.container).findByRole('button', { name: 'Следующий вопрос' }),
+    );
+    const secondNextMessage = hostSocket.sent[3];
+    expect(secondNextMessage).toEqual(expect.objectContaining({ type: 'next' }));
+    act(() => {
+      gameSocket.receive({
+        type: 'countdown_started',
+        sequence: 8,
+        payload: snapshot('countdown', 2),
+      });
+      hostSocket.receive({
+        type: 'countdown_started',
+        sequence: 8,
+        payload: snapshot('countdown', 2),
+      });
+      hostSocket.receive({
+        type: 'command_accepted',
+        request_id: secondNextMessage.request_id,
+        sequence: 8,
+        payload: { duplicate: false },
+      });
+    });
+
+    act(() => {
+      gameSocket.receive({
+        type: 'question_opened',
+        sequence: 9,
+        payload: openQuestionSnapshot(2),
+      });
+      hostSocket.receive({
+        type: 'question_opened',
+        sequence: 9,
+        payload: openQuestionSnapshot(2),
+      });
+    });
+    expect(
+      await within(playerView.container).findByRole('heading', { name: 'Вопрос 3?' }),
+    ).toBeTruthy();
+
+    act(() => {
+      const closed = closedQuestion(2, 'finished');
+      gameSocket.receive(closed);
+      hostSocket.receive(closed);
+      const finished = {
+        type: 'game_finished',
+        sequence: 10,
+        payload: {
+          game_id: 'game-1',
+          code: 'ABC123',
+          quiz_title: 'Физика',
+          phase: 'finished',
+          players: [{ id: 'player-1', nickname: 'Alice', score: 0 }],
+          current_question_index: 2,
+        },
+      };
+      gameSocket.receive(finished);
+      hostSocket.receive(finished);
+    });
+    expect(await within(playerView.container).findByText('finished')).toBeTruthy();
+    expect(
+      within(hostView.container).queryByRole('button', { name: 'Следующий вопрос' }),
     ).toBeNull();
   });
 

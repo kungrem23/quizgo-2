@@ -137,6 +137,13 @@ func TestHubRunsGameLifecycleAndPersistsEveryTransition(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForEvent(t, reconnectedDuringCountdown.Events, "answer_accepted", 2*time.Second)
+	answered, err := repository.GetByID(context.Background(), created.Game.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answered.Phase != game.PhaseQuestionOpen || len(answered.Submissions) != 1 || answered.QuestionClosesAt == nil {
+		t.Fatalf("all players answering closed the question before its deadline: %#v", answered)
+	}
 	waitForEvent(t, reconnectedDuringCountdown.Events, "question_closed", 3*time.Second)
 	waitForEvent(t, reconnectedDuringCountdown.Events, "game_finished", 2*time.Second)
 	reconnectedAfterFinish, err := hub.AuthenticatePlayer(context.Background(), created.Game.ID, joined.Player.ID, joined.Ticket)

@@ -50,4 +50,23 @@ describe('server deadline display', () => {
       expired: true,
     });
   });
+
+  it('switches to a new server deadline immediately and cleans up the previous timer', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'));
+    const timer = renderHook(({ deadline }) => useDeadline(deadline, 100), {
+      initialProps: { deadline: '2026-09-30T12:00:01.000Z' },
+    });
+
+    expect(timer.result.current.remainingSeconds).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    timer.rerender({ deadline: '2026-09-30T12:00:10.000Z' });
+
+    expect(timer.result.current.remainingSeconds).toBe(10);
+    expect(vi.getTimerCount()).toBe(1);
+
+    timer.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

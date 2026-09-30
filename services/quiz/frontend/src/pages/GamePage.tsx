@@ -9,6 +9,7 @@ import { CountdownScreen } from '../features/game/CountdownScreen';
 import { GameSessionProvider, useGameSession } from '../features/game/GameSession';
 import { HostLobby } from '../features/game/HostLobby';
 import { PlayerLobby } from '../features/game/PlayerLobby';
+import { QuestionClosedScreen } from '../features/game/QuestionClosedScreen';
 import { HostQuestionScreen, PlayerQuestionScreen } from '../features/game/QuestionScreen';
 import type { GameRole } from '../features/game/types';
 import { ErrorBox, Loading } from '../shared/ui/ui';
@@ -57,7 +58,7 @@ function FoundationGameView({ role }: { role: GameRole }) {
 }
 
 function HostGameView() {
-  const { game, status, error } = useGameSession();
+  const { game, status, error, sendCommand } = useGameSession();
   if (!game.snapshot && !error) return <Loading label="Подключаем комнату…" />;
   if (game.snapshot?.phase === 'lobby') return <HostLobby />;
   if (game.snapshot?.phase === 'countdown') {
@@ -71,6 +72,9 @@ function HostGameView() {
         answeredPlayerIds={game.answeredPlayerIds}
       />
     );
+  }
+  if (game.snapshot?.phase === 'scoreboard' || game.snapshot?.phase === 'question_closed') {
+    return <QuestionClosedScreen role="host" snapshot={game.snapshot} sendCommand={sendCommand} />;
   }
   return <FoundationGameView role="host" />;
 }
@@ -94,6 +98,9 @@ function PlayerGameView({ nickname }: { nickname: string }) {
         sendCommand={sendCommand}
       />
     );
+  }
+  if (game.snapshot?.phase === 'scoreboard' || game.snapshot?.phase === 'question_closed') {
+    return <QuestionClosedScreen role="player" snapshot={game.snapshot} />;
   }
   return <FoundationGameView role="player" />;
 }

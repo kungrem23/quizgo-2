@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 
 export interface DeadlineState {
   remainingMs: number;
@@ -22,18 +22,28 @@ export function deadlineProgress(remainingMs: number, totalSeconds: number): num
 }
 
 export function useDeadline(deadline: string | undefined, refreshMs = 200): DeadlineState {
-  const [now, setNow] = useState(() => Date.now());
+  const [, refresh] = useReducer((value: number) => value + 1, 0);
+  const current = deadlineState(deadline);
 
   useEffect(() => {
-    setNow(Date.now());
-    if (!deadline || deadlineState(deadline).expired) return;
-    const timer = window.setInterval(() => {
-      const next = Date.now();
-      setNow(next);
-      if (deadlineState(deadline, next).expired) window.clearInterval(timer);
-    }, refreshMs);
-    return () => window.clearInterval(timer);
+    if (!deadline) return;
+    let timer: number | undefined;
+    const schedule = () => {
+      const state = deadlineState(deadline);
+      if (state.expired) return;
+      timer = window.setTimeout(
+        () => {
+          refresh();
+          schedule();
+        },
+        Math.min(refreshMs, state.remainingMs),
+      );
+    };
+    schedule();
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [deadline, refreshMs]);
 
-  return deadlineState(deadline, now);
+  return current;
 }

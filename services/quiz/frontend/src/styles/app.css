@@ -3647,7 +3647,6 @@ svg {
 .countdown-value.is-expired {
   border-color: #d8d3e7;
   color: #858198;
-  font-size: 72px;
 }
 .game-countdown-page h1,
 .game-countdown-page p {
@@ -3919,6 +3918,62 @@ button.game-answer-card:disabled {
   background: #ffebeb;
 }
 
+/* Minimal transition between questions. Results stay server-owned and are not
+   presented here until the dedicated scoreboard flow is implemented. */
+.question-closed-page {
+  min-height: 100vh;
+  padding: 32px;
+  display: grid;
+  place-items: center;
+  color: #211b3d;
+  background: #f7f7fc;
+}
+.question-closed-card {
+  width: min(100%, 520px);
+  padding: 44px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  border: 1px solid #e2dfed;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgb(33 27 61 / 8%);
+  text-align: center;
+}
+.question-closed-icon {
+  width: 68px;
+  height: 68px;
+  margin-bottom: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #168c45;
+  background: #ebf9f1;
+}
+.question-closed-card h1 {
+  margin-top: 10px;
+  font-size: clamp(26px, 4vw, 36px);
+}
+.question-closed-card > p {
+  margin-top: 12px;
+  color: #858198;
+  line-height: 1.55;
+}
+.question-closed-players {
+  margin: 24px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #7047eb;
+  font-size: 13px;
+  font-weight: 650;
+}
+.question-closed-card > .error-box {
+  width: 100%;
+  margin-bottom: 18px;
+  text-align: left;
+}
+
 @media (max-width: 900px) {
   .host-player-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4005,9 +4060,6 @@ button.game-answer-card:disabled {
     height: 150px;
     border-width: 6px;
     font-size: 76px;
-  }
-  .countdown-value.is-expired {
-    font-size: 54px;
   }
   .game-countdown-page h1 {
     margin-top: 48px;
@@ -4100,5 +4152,11 @@ button.game-answer-card:disabled {
     position: absolute;
     top: 8px;
     right: 8px;
+  }
+  .question-closed-page {
+    padding: 18px;
+  }
+  .question-closed-card {
+    padding: 32px 22px;
   }
 }
