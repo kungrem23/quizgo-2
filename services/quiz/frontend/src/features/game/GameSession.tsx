@@ -19,6 +19,7 @@ interface GameSessionValue {
   status: GameSocketStatus;
   error: GameErrorCode | 'connection_failed' | 'protocol_error' | null;
   sendCommand: (command: GameCommand, requestId?: string) => PendingGameCommand;
+  recordAnswerSelection: (questionId: number, answerId: number) => void;
 }
 
 const GameSessionContext = createContext<GameSessionValue | null>(null);
@@ -82,9 +83,13 @@ export function GameSessionProvider({
     return socket.sendCommand(command, requestId);
   }, []);
 
+  const recordAnswerSelection = useCallback((questionId: number, answerId: number) => {
+    dispatch({ type: 'answer_selected', questionId, answerId });
+  }, []);
+
   const value = useMemo(
-    () => ({ game, status, error, sendCommand }),
-    [error, game, sendCommand, status],
+    () => ({ game, status, error, sendCommand, recordAnswerSelection }),
+    [error, game, recordAnswerSelection, sendCommand, status],
   );
   return <GameSessionContext.Provider value={value}>{children}</GameSessionContext.Provider>;
 }

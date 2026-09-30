@@ -76,6 +76,7 @@ describe('authoritative game reducer', () => {
       }),
     });
     expect(state.answeredPlayerIds).toEqual([]);
+    expect(state.observedQuestionIds).toEqual([1]);
   });
 
   it('ignores stale mutations after a newer state snapshot', () => {
@@ -140,6 +141,23 @@ describe('authoritative game reducer', () => {
       }),
     });
     expect(state.answeredPlayerIds).toBeNull();
+    expect(state.observedQuestionIds).toEqual([]);
+  });
+
+  it('keeps a browser-session answer selection for the post-question result', () => {
+    const selected = gameReducer(initialGameState, {
+      type: 'answer_selected',
+      questionId: 10,
+      answerId: 12,
+    });
+    expect(selected.selectedAnswerIds).toEqual({ 10: 12 });
+
+    const unchanged = gameReducer(selected, {
+      type: 'answer_selected',
+      questionId: 10,
+      answerId: 11,
+    });
+    expect(unchanged).toBe(selected);
   });
 
   it('follows countdown, question_open and question_closed server transitions', () => {
@@ -226,5 +244,6 @@ describe('authoritative game reducer', () => {
     expect(state.snapshot?.current_question?.id).toBe(10);
     expect(state.snapshot?.correct_answer_ids).toEqual([11]);
     expect(state.lastQuestionClosed?.question_id).toBe(10);
+    expect(state.observedQuestionIds).toEqual([10]);
   });
 });

@@ -277,6 +277,9 @@ describe('player join route flow', () => {
         'Ждём, пока ведущий запустит следующий вопрос.',
       ),
     ).toBeTruthy();
+    expect(
+      within(playerView.container).getByRole('heading', { name: 'Время вышло!' }),
+    ).toBeTruthy();
     expect(within(playerView.container).queryByRole('heading', { name: 'Вопрос 1?' })).toBeNull();
 
     await user.click(

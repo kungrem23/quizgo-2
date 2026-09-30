@@ -52,6 +52,54 @@ describe('question closed transition', () => {
     render(<QuestionClosedScreen role="player" snapshot={snapshot} />);
 
     expect(screen.getByText('Ждём, пока ведущий запустит следующий вопрос.')).toBeTruthy();
+    expect(
+      screen.getByText('Результат ответа недоступен после переподключения.'),
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Следующий вопрос' })).toBeNull();
+  });
+
+  it('shows a correct accepted answer and the current total score without fake deltas', () => {
+    render(
+      <QuestionClosedScreen
+        role="player"
+        snapshot={snapshot}
+        playerId="player-1"
+        selectedAnswerId={11}
+        answerAccepted
+        questionObserved
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Верно!' })).toBeTruthy();
+    expect(screen.getAllByText('A')).toHaveLength(2);
+    expect(screen.getByText('100')).toBeTruthy();
+    expect(screen.queryByText(/\+100/)).toBeNull();
+  });
+
+  it('distinguishes an incorrect answer from a real timeout', () => {
+    const view = render(
+      <QuestionClosedScreen
+        role="player"
+        snapshot={snapshot}
+        playerId="player-1"
+        selectedAnswerId={12}
+        answerAccepted
+        questionObserved
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'В этот раз не угадали' })).toBeTruthy();
+    expect(screen.getByText('B')).toBeTruthy();
+    expect(screen.getByText('A')).toBeTruthy();
+
+    view.rerender(
+      <QuestionClosedScreen
+        role="player"
+        snapshot={snapshot}
+        playerId="player-1"
+        questionObserved
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'Время вышло!' })).toBeTruthy();
+    expect(screen.getByText('Не выбран')).toBeTruthy();
   });
 });

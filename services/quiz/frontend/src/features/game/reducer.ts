@@ -11,6 +11,10 @@ export interface GameClientState {
   /** null means a reconnect cannot reconstruct how many players already answered. */
   answeredPlayerIds: string[] | null;
   acceptedQuestionIds: number[];
+  /** Answers selected in this browser session; game-service does not return them on reconnect. */
+  selectedAnswerIds: Record<number, number>;
+  /** A question_opened event proves this session observed the whole unanswered question. */
+  observedQuestionIds: number[];
   lastQuestionClosed: QuestionClosedPayload | null;
 }
 
@@ -19,10 +23,15 @@ export const initialGameState: GameClientState = {
   lastSequence: 0,
   answeredPlayerIds: null,
   acceptedQuestionIds: [],
+  selectedAnswerIds: {},
+  observedQuestionIds: [],
   lastQuestionClosed: null,
 };
 
-export type GameStateAction = { type: 'message'; message: GameServerMessage } | { type: 'reset' };
+export type GameStateAction =
+  | { type: 'message'; message: GameServerMessage }
+  | { type: 'answer_selected'; questionId: number; answerId: number }
+  | { type: 'reset' };
 
 function playersWith(current: GamePlayer[], player: GamePlayer): GamePlayer[] {
   const found = current.some((item) => item.id === player.id);
@@ -61,17 +70,34 @@ function fullState(
         ? null
         : (answeredPlayerIds ?? []);
   }
+  const openedQuestionID =
+    message.type === 'question_opened' ? message.payload.current_question?.id : undefined;
   return {
     snapshot: message.payload,
     lastSequence: Math.max(state.lastSequence, message.sequence),
     answeredPlayerIds,
     acceptedQuestionIds: state.acceptedQuestionIds,
+    selectedAnswerIds: state.selectedAnswerIds,
+    observedQuestionIds:
+      openedQuestionID === undefined
+        ? state.observedQuestionIds
+        : appendUnique(state.observedQuestionIds, openedQuestionID),
     lastQuestionClosed: questionChanged ? null : state.lastQuestionClosed,
   };
 }
 
 export function gameReducer(state: GameClientState, action: GameStateAction): GameClientState {
   if (action.type === 'reset') return initialGameState;
+  if (action.type === 'answer_selected') {
+    if (state.selectedAnswerIds[action.questionId] !== undefined) return state;
+    return {
+      ...state,
+      selectedAnswerIds: {
+        ...state.selectedAnswerIds,
+        [action.questionId]: action.answerId,
+      },
+    };
+  }
   const message = action.message;
 
   switch (message.type) {

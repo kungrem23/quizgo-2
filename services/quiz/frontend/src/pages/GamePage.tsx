@@ -79,8 +79,8 @@ function HostGameView() {
   return <FoundationGameView role="host" />;
 }
 
-function PlayerGameView({ nickname }: { nickname: string }) {
-  const { game, status, error, sendCommand } = useGameSession();
+function PlayerGameView({ nickname, playerId }: { nickname: string; playerId: string }) {
+  const { game, status, error, sendCommand, recordAnswerSelection } = useGameSession();
   if (!game.snapshot && !error) return <Loading label="Подключаемся к игре…" />;
   if (game.snapshot?.phase === 'lobby') {
     return <PlayerLobby nickname={nickname} />;
@@ -95,12 +95,28 @@ function PlayerGameView({ nickname }: { nickname: string }) {
         snapshot={game.snapshot}
         status={status}
         acceptedQuestionIds={game.acceptedQuestionIds}
+        selectedAnswerId={game.selectedAnswerIds[game.snapshot.current_question.id]}
+        onAnswerSelected={recordAnswerSelection}
         sendCommand={sendCommand}
       />
     );
   }
   if (game.snapshot?.phase === 'scoreboard' || game.snapshot?.phase === 'question_closed') {
-    return <QuestionClosedScreen role="player" snapshot={game.snapshot} />;
+    const questionID = game.snapshot.current_question?.id;
+    return (
+      <QuestionClosedScreen
+        role="player"
+        snapshot={game.snapshot}
+        playerId={playerId}
+        selectedAnswerId={questionID === undefined ? undefined : game.selectedAnswerIds[questionID]}
+        answerAccepted={
+          questionID === undefined ? false : game.acceptedQuestionIds.includes(questionID)
+        }
+        questionObserved={
+          questionID === undefined ? false : game.observedQuestionIds.includes(questionID)
+        }
+      />
+    );
   }
   return <FoundationGameView role="player" />;
 }
@@ -137,7 +153,9 @@ export function PlayerGamePage() {
   return (
     <GameCredentialGuard role="player">
       {(credentials) =>
-        credentials.role === 'player' ? <PlayerGameView nickname={credentials.nickname} /> : null
+        credentials.role === 'player' ? (
+          <PlayerGameView nickname={credentials.nickname} playerId={credentials.playerId} />
+        ) : null
       }
     </GameCredentialGuard>
   );

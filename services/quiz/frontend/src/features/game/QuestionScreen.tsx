@@ -135,27 +135,33 @@ export function PlayerQuestionScreen({
   snapshot,
   status,
   acceptedQuestionIds,
+  selectedAnswerId: recordedAnswerId,
+  onAnswerSelected,
   sendCommand,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
   acceptedQuestionIds: number[];
+  selectedAnswerId?: number | null;
+  onAnswerSelected?: (questionId: number, answerId: number) => void;
   sendCommand: SendCommand;
 }) {
   const question = snapshot.current_question!;
   const deadline = useDeadline(snapshot.question_closes_at);
-  const [selectedAnswerId, setSelectedAnswerId] = useState<number | null>(null);
+  const [localAnswerId, setLocalAnswerId] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
   const lockedRef = useRef(false);
   const requestIDRef = useRef<string | null>(null);
+  const selectedAnswerId = recordedAnswerId ?? localAnswerId;
   const accepted = acceptedQuestionIds.includes(question.id);
   const locked = lockedRef.current || selectedAnswerId !== null || accepted || deadline.expired;
 
   async function answer(answerID: number) {
     if (lockedRef.current || accepted || deadline.expired) return;
     lockedRef.current = true;
-    setSelectedAnswerId(answerID);
+    setLocalAnswerId(answerID);
+    onAnswerSelected?.(question.id, answerID);
     setPending(true);
     setSubmissionError('');
     const requestID = requestIDRef.current ?? createAnswerRequestID(question.id);
