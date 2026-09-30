@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   BookOpen,
   Check,
@@ -23,6 +23,7 @@ export function QuizOverview({
   selectedId,
   onSelect,
   draft = false,
+  children,
 }: {
   quiz: QuizContent;
   authorName: string;
@@ -31,6 +32,7 @@ export function QuizOverview({
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   draft?: boolean;
+  children?: ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [shareFallback, setShareFallback] = useState(false);
@@ -84,6 +86,7 @@ export function QuizOverview({
           )}
         </div>
       </div>
+      {children}
       <section className="overview-questions">
         <div className="section-heading">
           <h2>

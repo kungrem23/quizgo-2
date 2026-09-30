@@ -91,6 +91,28 @@ describe('authoritative game reducer', () => {
     expect(stale).toBe(state);
   });
 
+  it('applies player joins and explicit leaves to the lobby snapshot', () => {
+    let state = gameReducer(initialGameState, { type: 'message', message: snapshot() });
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'player_joined',
+        sequence: 4,
+        payload: { id: 'p2', nickname: 'Bob', score: 0 },
+      }),
+    });
+    expect(state.snapshot?.players.map((player) => player.id)).toEqual(['p1', 'p2']);
+    state = gameReducer(state, {
+      type: 'message',
+      message: parseServerMessage({
+        type: 'player_left',
+        sequence: 5,
+        payload: { id: 'p1', nickname: 'Alice', score: 0 },
+      }),
+    });
+    expect(state.snapshot?.players.map((player) => player.id)).toEqual(['p2']);
+  });
+
   it('does not invent an answered count when reconnect state is already in a question', () => {
     const state = gameReducer(initialGameState, {
       type: 'message',

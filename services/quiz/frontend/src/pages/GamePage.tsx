@@ -8,6 +8,7 @@ import {
 import { GameSessionProvider, useGameSession } from '../features/game/GameSession';
 import type { GameRole } from '../features/game/types';
 import { ErrorBox, Loading } from '../shared/ui/ui';
+import { HostLobby } from '../features/game/HostLobby';
 
 function MissingCredentials({ role }: { role: GameRole }) {
   return (
@@ -52,6 +53,13 @@ function FoundationGameView({ role }: { role: GameRole }) {
   );
 }
 
+function HostGameView() {
+  const { game, error } = useGameSession();
+  if (!game.snapshot && !error) return <Loading label="Подключаем комнату…" />;
+  if (game.snapshot?.phase === 'lobby') return <HostLobby />;
+  return <FoundationGameView role="host" />;
+}
+
 function GameCredentialGuard({ role, children }: { role: GameRole; children: ReactNode }) {
   const gameId = useParams().gameId || '';
   const credentials = useMemo<GameCredentials | null>(
@@ -65,7 +73,7 @@ function GameCredentialGuard({ role, children }: { role: GameRole; children: Rea
 export function HostGamePage() {
   return (
     <GameCredentialGuard role="host">
-      <FoundationGameView role="host" />
+      <HostGameView />
     </GameCredentialGuard>
   );
 }

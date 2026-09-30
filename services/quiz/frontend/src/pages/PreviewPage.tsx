@@ -6,6 +6,7 @@ import { useAuth } from '../features/auth/AuthProvider';
 import { QuizOverview } from '../features/quiz-preview/QuizOverview';
 import { Button, ErrorBox, Loading } from '../shared/ui/ui';
 import { Footer, SiteHeader } from '../shared/ui/SiteHeader';
+import { HostLaunchCard } from '../features/game/HostLaunchCard';
 export function PreviewPage() {
   const id = Number(useParams().quizId);
   const { user } = useAuth();
@@ -60,7 +61,14 @@ export function PreviewPage() {
                 })
               }
               onEdit={(qid) => navigate(`/quizzes/${id}/edit${qid ? `?question=${qid}` : ''}`)}
-            />
+            >
+              {isAuthor && (
+                <HostLaunchCard
+                  quizId={id}
+                  questionCount={(authorQuery.data || query.data).questions.length}
+                />
+              )}
+            </QuizOverview>
           </>
         )}
       </main>

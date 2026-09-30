@@ -40,7 +40,8 @@ export function GameSessionProvider({
     const socket = new GameSocket({
       onMessage: (message: GameServerMessage) => {
         if (!active) return;
-        if (message.type === 'error') setError(message.payload.code);
+        if (message.type === 'error' && !message.request_id) setError(message.payload.code);
+        if (message.type === 'authenticated' || message.type === 'state') setError(null);
         dispatch({ type: 'message', message });
       },
       onStatus: (next) => {
