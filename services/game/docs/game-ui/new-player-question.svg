@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .m-card-shadow { filter: drop-shadow(0 4px 14px rgba(33, 27, 61, 0.08)); }
+      .btn-thumb-shadow { filter: drop-shadow(0 3px 8px rgba(33, 27, 61, 0.1)); }
+    </style>
+
+    <linearGradient id="mobImgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0EDFB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="390" height="844" fill="#F7F7FC"/>
+
+  <!-- Линейный таймер вверху (18 с из 30 с = 60%) -->
+  <rect x="0" y="0" width="390" height="5" fill="#E2DFED"/>
+  <rect x="0" y="0" width="234" height="5" fill="#7047EB"/>
+
+  <!-- Хедер мобилки -->
+  <g transform="translate(18, 16)">
+    <text x="0" y="16" class="semi" font-size="13" fill="#858198">Вопрос 3 из 10</text>
+    
+    <rect x="290" y="0" width="64" height="24" rx="12" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    <text x="322" y="16" class="bold tnum" font-size="13" fill="#7047EB" text-anchor="middle">18 с</text>
+  </g>
+
+  <!-- Краткий заголовок вопроса -->
+  <text x="18" y="66" class="bold" font-size="17" fill="#211B3D" letter-spacing="-0.2">
+    Какое явление на схеме?
+  </text>
+
+  <!-- ================= БОЛЬШАЯ ИЛЛЮСТРАЦИЯ ДЛЯ СМАРТФОНА ================= -->
+  <!-- Карточка 354x240 px занимает доминирующее место в верхней части экрана -->
+  <g class="m-card-shadow" transform="translate(18, 82)">
+    <rect width="354" height="240" rx="16" fill="url(#mobImgGrad)" stroke="#E2DFED" stroke-width="1"/>
+    
+    <!-- Колба и электроды -->
+    <rect x="50" y="45" width="254" height="150" rx="75" fill="none" stroke="#B5A1F8" stroke-width="2" stroke-dasharray="6 4"/>
+    <rect x="80" y="70" width="12" height="100" rx="3" fill="#858198"/>
+    <rect x="262" y="70" width="12" height="100" rx="3" fill="#858198"/>
+
+    <!-- Лучи фотонов -->
+    <path d="M 15 95 Q 45 80 75 105" fill="none" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 15 125 Q 45 110 75 130" fill="none" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 15 155 Q 45 140 75 155" fill="none" stroke="#7047EB" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Электроны -->
+    <circle cx="130" cy="110" r="8" fill="#E5484D"/>
+    <text x="130" y="113" class="bold" font-size="9" fill="#FFFFFF" text-anchor="middle">e⁻</text>
+    <path d="M 142 110 L 185 110" stroke="#E5484D" stroke-width="2" stroke-dasharray="3 3"/>
+
+    <circle cx="190" cy="140" r="8" fill="#E5484D"/>
+    <text x="190" y="143" class="bold" font-size="9" fill="#FFFFFF" text-anchor="middle">e⁻</text>
+    <path d="M 202 140 L 245 140" stroke="#E5484D" stroke-width="2" stroke-dasharray="3 3"/>
+
+    <!-- Бейдж масштаба -->
+    <rect x="117" y="202" width="120" height="24" rx="12" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    <text x="177" y="218" class="semi" font-size="11" fill="#7047EB" text-anchor="middle">Схема опыта (hν)</text>
+  </g>
+
+  <!-- ================= СЕТКА ВАРИАНТОВ (СЖАТАЯ ДЛЯ THUMB-ЗОНЫ) ================= -->
+  <!-- Кнопка 1: ▲ Красный -->
+  <g class="btn-thumb-shadow" transform="translate(18, 342)">
+    <rect width="354" height="104" rx="14" fill="#E5484D"/>
+    <rect x="16" y="24" width="56" height="56" rx="10" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="44" y="61" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">▲</text>
+    <text x="84" y="48" class="bold" font-size="18" fill="#FFFFFF">Фотоэффект</text>
+    <text x="84" y="72" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Выбивание электронов светом</text>
+  </g>
+
+  <!-- Кнопка 2: ◆ Синий -->
+  <g class="btn-thumb-shadow" transform="translate(18, 458)">
+    <rect width="354" height="104" rx="14" fill="#2F68EE"/>
+    <rect x="16" y="24" width="56" height="56" rx="10" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="44" y="61" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">◆</text>
+    <text x="84" y="48" class="bold" font-size="18" fill="#FFFFFF">Эффект Доплера</text>
+    <text x="84" y="72" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Сдвиг частоты волны</text>
+  </g>
+
+  <!-- Кнопка 3: ● Янтарный -->
+  <g class="btn-thumb-shadow" transform="translate(18, 574)">
+    <rect width="354" height="104" rx="14" fill="#D97706"/>
+    <rect x="16" y="24" width="56" height="56" rx="10" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="44" y="61" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">●</text>
+    <text x="84" y="48" class="bold" font-size="18" fill="#FFFFFF">Дифракция частиц</text>
+    <text x="84" y="72" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Рассеяние на решётке</text>
+  </g>
+
+  <!-- Кнопка 4: ■ Зелёный -->
+  <g class="btn-thumb-shadow" transform="translate(18, 690)">
+    <rect width="354" height="104" rx="14" fill="#16A34A"/>
+    <rect x="16" y="24" width="56" height="56" rx="10" fill="#FFFFFF" fill-opacity="0.2"/>
+    <text x="44" y="61" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">■</text>
+    <text x="84" y="48" class="bold" font-size="18" fill="#FFFFFF">Дисперсия света</text>
+    <text x="84" y="72" class="medium" font-size="13" fill="#FFFFFF" fill-opacity="0.9">Разложение в спектр</text>
+  </g>
+
+  <!-- Home Indicator -->
+  <rect x="127" y="828" width="136" height="5" rx="2.5" fill="#211B3D" opacity="0.3"/>
+</svg>

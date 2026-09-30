@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%">
+  <defs>
+    <style>
+      .bold { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 700; }
+      .semi { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .medium { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; }
+      .tnum { font-variant-numeric: tabular-nums; }
+      .card-shadow { filter: drop-shadow(0 6px 20px rgba(33, 27, 61, 0.06)); }
+      .bar-shadow { filter: drop-shadow(0 8px 20px rgba(22, 163, 74, 0.18)); }
+      .btn-shadow { filter: drop-shadow(0 8px 24px rgba(112, 71, 235, 0.3)); }
+    </style>
+
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EFF1FE"/>
+      <stop offset="50%" stop-color="#F7F7FC"/>
+      <stop offset="100%" stop-color="#E8E5FA"/>
+    </linearGradient>
+
+    <!-- Декоративные мягкие сферы фона -->
+    <radialGradient id="bubble1" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#D7D3F7"/>
+      <stop offset="100%" stop-color="#B2A8F0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Фон экрана -->
+  <rect width="1440" height="900" fill="url(#bgGrad)"/>
+
+  <!-- Парящие сферы (стилистика QuizGo) -->
+  <circle cx="210" cy="340" r="46" fill="url(#bubble1)" opacity="0.6"/>
+  <circle cx="260" cy="420" r="24" fill="url(#bubble1)" opacity="0.4"/>
+  <circle cx="1240" cy="310" r="54" fill="url(#bubble1)" opacity="0.6"/>
+  <circle cx="1180" cy="400" r="28" fill="url(#bubble1)" opacity="0.45"/>
+
+  <!-- Верхняя строка / Бренд -->
+  <text x="64" y="56" class="bold" font-size="26" fill="#7047EB" letter-spacing="-0.5">QuizGo</text>
+  <text x="176" y="54" class="medium" font-size="14" fill="#858198">Вопрос 3 из 10 • Ответы приняты</text>
+
+  <!-- Карточка с текстом вопроса (по центру сверху) -->
+  <g class="card-shadow" transform="translate(195, 96)">
+    <rect width="1050" height="84" rx="16" fill="#FFFFFF" stroke="#E2DFED" stroke-width="1"/>
+    <text x="525" y="52" class="bold" font-size="26" fill="#211B3D" text-anchor="middle">
+      Какое явление окончательно доказало квантовую природу света?
+    </text>
+  </g>
+
+  <!-- ================= ЦЕНТРАЛЬНАЯ ГИСТОГРАММА ================= -->
+  <!-- Базовая линия оси диаграммы: Y = 620 -->
+  <g transform="translate(300, 0)">
+    
+    <!-- 1. Столбец Красный ▲ (14 голосов — 58%, ВЕРНЫЙ ВАРИАНТ) -->
+    <g class="bar-shadow">
+      <!-- Бейдж "Правильный ответ" над столбцом -->
+      <rect x="0" y="212" width="168" height="38" rx="19" fill="#16A34A"/>
+      <text x="84" y="236" class="bold" font-size="14" fill="#FFFFFF" text-anchor="middle">✓ ВЕРНО (14)</text>
+
+      <!-- Тело столбца (высота 350px) -->
+      <rect x="0" y="260" width="168" height="300" rx="14" fill="#E5484D"/>
+      <!-- Основание с геометрическим символом -->
+      <rect x="0" y="560" width="168" height="60" rx="4" fill="#C93439"/>
+      <text x="84" y="600" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">▲</text>
+    </g>
+
+    <!-- 2. Столбец Синий ◆ (3 голоса — 13%) -->
+    <g>
+      <text x="310" y="470" class="bold tnum" font-size="20" fill="#211B3D" text-anchor="middle">3</text>
+      <rect x="226" y="488" width="168" height="72" rx="14" fill="#2F68EE" opacity="0.85"/>
+      <rect x="226" y="560" width="168" height="60" rx="4" fill="#2454C6"/>
+      <text x="310" y="600" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">◆</text>
+    </g>
+
+    <!-- 3. Столбец Янтарный ● (2 голоса — 8%) -->
+    <g>
+      <text x="536" y="494" class="bold tnum" font-size="20" fill="#211B3D" text-anchor="middle">2</text>
+      <rect x="452" y="512" width="168" height="48" rx="14" fill="#D97706" opacity="0.85"/>
+      <rect x="452" y="560" width="168" height="60" rx="4" fill="#B45309"/>
+      <text x="536" y="600" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">●</text>
+    </g>
+
+    <!-- 4. Столбец Зелёный ■ (5 голосов — 21%) -->
+    <g>
+      <text x="762" y="422" class="bold tnum" font-size="20" fill="#211B3D" text-anchor="middle">5</text>
+      <rect x="678" y="440" width="168" height="120" rx="14" fill="#16A34A" opacity="0.85"/>
+      <rect x="678" y="560" width="168" height="60" rx="4" fill="#15803D"/>
+      <text x="762" y="600" class="bold" font-size="30" fill="#FFFFFF" text-anchor="middle">■</text>
+    </g>
+  </g>
+
+  <!-- ================= БОЛЬШАЯ КНОПКА ПЕРЕХОДА ВНИЗУ ПО ЦЕНТРУ ================= -->
+  <g class="btn-shadow" transform="translate(480, 715)">
+    <!-- Кнопка 480x76 px -->
+    <rect width="480" height="76" rx="22" fill="#7047EB"/>
+    <text x="220" y="46" class="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">
+      Следующий вопрос  →
+    </text>
+    
+    <!-- Бейдж горячей клавиши Space -->
+    <rect x="382" y="24" width="68" height="30" rx="8" fill="#5832D4"/>
+    <text x="416" y="44" class="semi" font-size="13" fill="#FFFFFF" text-anchor="middle">Space</text>
+  </g>
+
+  <!-- Информационная строчка под кнопкой -->
+  <text x="720" y="828" class="medium" font-size="15" fill="#858198" text-anchor="middle">
+    Все 24 игрока ответили • 58% правильных ответов
+  </text>
+</svg>
