@@ -174,7 +174,7 @@ function QuestionResultStatus({
         </div>
         <div>
           <dt>Правильный ответ</dt>
-          <dd>
+          <dd className={correctAnswers.length > 0 ? 'correct' : 'incorrect'}>
             {correctAnswers.length > 0
               ? correctAnswers.map((answer) => answer.text).join(', ')
               : 'Недоступен'}
