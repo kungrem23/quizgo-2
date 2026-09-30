@@ -22,9 +22,24 @@ export function parseServerTimestamp(timestamp: string | undefined): number {
   return Date.parse(`${parts[1]}.${milliseconds}${parts[3]}`);
 }
 
-export function deadlineState(deadline: string | undefined, now = Date.now()): DeadlineState {
+export function serverClockOffset(
+  serverTime: string | undefined,
+  clientReceivedAtMs: number,
+): number | undefined {
+  const serverTimeMs = parseServerTimestamp(serverTime);
+  return Number.isFinite(serverTimeMs) && Number.isFinite(clientReceivedAtMs)
+    ? serverTimeMs - clientReceivedAtMs
+    : undefined;
+}
+
+export function deadlineState(
+  deadline: string | undefined,
+  now = Date.now(),
+  serverTimeOffsetMs = 0,
+): DeadlineState {
   const deadlineMs = parseServerTimestamp(deadline);
-  const remainingMs = Number.isFinite(deadlineMs) ? Math.max(0, deadlineMs - now) : 0;
+  const serverNow = now + serverTimeOffsetMs;
+  const remainingMs = Number.isFinite(deadlineMs) ? Math.max(0, deadlineMs - serverNow) : 0;
   return {
     remainingMs,
     remainingSeconds: Math.ceil(remainingMs / 1000),
@@ -37,15 +52,19 @@ export function deadlineProgress(remainingMs: number, totalSeconds: number): num
   return Math.min(100, Math.max(0, (remainingMs / (totalSeconds * 1000)) * 100));
 }
 
-export function useDeadline(deadline: string | undefined, refreshMs = 200): DeadlineState {
+export function useDeadline(
+  deadline: string | undefined,
+  serverTimeOffsetMs = 0,
+  refreshMs = 200,
+): DeadlineState {
   const [, refresh] = useReducer((value: number) => value + 1, 0);
-  const current = deadlineState(deadline);
+  const current = deadlineState(deadline, Date.now(), serverTimeOffsetMs);
 
   useEffect(() => {
     if (!deadline) return;
     let timer: number | undefined;
     const schedule = () => {
-      const state = deadlineState(deadline);
+      const state = deadlineState(deadline, Date.now(), serverTimeOffsetMs);
       if (state.expired) return;
       timer = window.setTimeout(
         () => {
@@ -59,7 +78,7 @@ export function useDeadline(deadline: string | undefined, refreshMs = 200): Dead
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [deadline, refreshMs]);
+  }, [deadline, refreshMs, serverTimeOffsetMs]);
 
   return current;
 }

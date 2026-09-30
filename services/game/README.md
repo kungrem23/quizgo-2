@@ -100,6 +100,8 @@ service token. Quiz проверяет пользователя, владени�
 Основные события: `player_joined`, `countdown_started`, `question_opened`,
 `answer_accepted`, `player_answered`, `question_closed`, `player_left`,
 `player_removed`, `game_finished`.
+Каждый server envelope содержит UTC `server_time`; клиент использует его для
+компенсации расхождения часов устройства при отображении абсолютных дедлайнов.
 `countdown_started` содержит `countdown_ends_at`, но ещё не раскрывает вопрос.
 После истечения времени не последнего вопроса фаза становится `scoreboard`, а
 совместимое событие `question_closed` показывает `correct_answer_ids` и таблицу

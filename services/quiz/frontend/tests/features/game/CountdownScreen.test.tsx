@@ -15,9 +15,9 @@ afterEach(() => {
 });
 
 describe('host and player countdown', () => {
-  it('uses the same future server deadline, counts down, and waits at zero for question_opened', () => {
+  it('compensates a fast desktop clock for host and player and waits for question_opened', () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-30T12:00:00.223Z'));
+    vi.setSystemTime(new Date('2026-09-30T12:05:00.223Z'));
     const nativeParse = Date.parse;
     vi.spyOn(Date, 'parse').mockImplementation((value) => {
       if (/\.\d{4,}(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return Number.NaN;
@@ -26,6 +26,7 @@ describe('host and player countdown', () => {
     const countdownStarted = parseServerMessage({
       type: 'countdown_started',
       sequence: 2,
+      server_time: '2026-09-30T12:00:00.123456789Z',
       payload: {
         game_id: 'game-1',
         code: 'ABC123',
@@ -51,10 +52,18 @@ describe('host and player countdown', () => {
     const view = render(
       <>
         <section aria-label="Host countdown">
-          <CountdownScreen snapshot={hostState.snapshot!} status={connected} />
+          <CountdownScreen
+            snapshot={hostState.snapshot!}
+            status={connected}
+            serverTimeOffsetMs={hostState.serverTimeOffsetMs}
+          />
         </section>
         <section aria-label="Player countdown">
-          <CountdownScreen snapshot={playerState.snapshot!} status={connected} />
+          <CountdownScreen
+            snapshot={playerState.snapshot!}
+            status={connected}
+            serverTimeOffsetMs={playerState.serverTimeOffsetMs}
+          />
         </section>
       </>,
     );

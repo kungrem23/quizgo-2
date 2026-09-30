@@ -522,6 +522,7 @@ func decodePayload(raw json.RawMessage, target any) error {
 }
 
 func (h *Handler) writeMessage(ctx context.Context, connection *websocket.Conn, message ServerMessage) error {
+	message.ServerTime = time.Now().UTC()
 	writeCtx, cancel := context.WithTimeout(ctx, h.writeTimeout)
 	defer cancel()
 	return wsjson.Write(writeCtx, connection, message)

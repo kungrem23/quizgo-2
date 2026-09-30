@@ -36,6 +36,7 @@ describe('question closed transition', () => {
     const user = userEvent.setup();
 
     render(<QuestionClosedScreen role="host" snapshot={snapshot} sendCommand={sendCommand} />);
+    expect(screen.getByLabelText('Правильный ответ')).toBeTruthy();
     const button = screen.getByRole('button', { name: 'Следующий вопрос' });
     await user.click(button);
 
@@ -52,9 +53,7 @@ describe('question closed transition', () => {
     render(<QuestionClosedScreen role="player" snapshot={snapshot} />);
 
     expect(screen.getByText('Ждём, пока ведущий запустит следующий вопрос.')).toBeTruthy();
-    expect(
-      screen.getByText('Результат ответа недоступен после переподключения.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Результат ответа недоступен после переподключения.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Следующий вопрос' })).toBeNull();
   });
 

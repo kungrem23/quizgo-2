@@ -5,6 +5,7 @@ import {
   deadlineProgress,
   deadlineState,
   parseServerTimestamp,
+  serverClockOffset,
   useDeadline,
 } from '../../../src/features/game/deadline';
 
@@ -50,6 +51,19 @@ describe('server deadline display', () => {
     expect(deadlineState(undefined, now).expired).toBe(true);
   });
 
+  it('compensates both fast and slow client clocks from the server clock sample', () => {
+    const serverNow = Date.UTC(2026, 8, 30, 12, 0, 0);
+    const deadline = '2026-09-30T12:00:03.000000000Z';
+    const fastClientNow = serverNow + 5 * 60_000;
+    const slowClientNow = serverNow - 4 * 60_000;
+
+    const fastOffset = serverClockOffset('2026-09-30T12:00:00.000000000Z', fastClientNow);
+    const slowOffset = serverClockOffset('2026-09-30T12:00:00.000000000Z', slowClientNow);
+
+    expect(deadlineState(deadline, fastClientNow, fastOffset).remainingSeconds).toBe(3);
+    expect(deadlineState(deadline, slowClientNow, slowOffset).remainingSeconds).toBe(3);
+  });
+
   it('calculates a bounded progress percentage from the question duration', () => {
     expect(deadlineProgress(15_000, 30)).toBe(50);
     expect(deadlineProgress(45_000, 30)).toBe(100);
@@ -61,7 +75,7 @@ describe('server deadline display', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'));
     const deadline = '2026-09-30T12:00:01.000Z';
-    const timer = renderHook(() => useDeadline(deadline, 100));
+    const timer = renderHook(() => useDeadline(deadline, 0, 100));
     expect(timer.result.current.remainingSeconds).toBe(1);
 
     act(() => vi.advanceTimersByTime(1_100));
@@ -76,7 +90,7 @@ describe('server deadline display', () => {
   it('switches to a new server deadline immediately and cleans up the previous timer', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'));
-    const timer = renderHook(({ deadline }) => useDeadline(deadline, 100), {
+    const timer = renderHook(({ deadline }) => useDeadline(deadline, 0, 100), {
       initialProps: { deadline: '2026-09-30T12:00:01.000Z' },
     });
 

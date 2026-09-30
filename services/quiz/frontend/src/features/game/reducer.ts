@@ -4,10 +4,13 @@ import type {
   GameStateSnapshot,
   QuestionClosedPayload,
 } from './types';
+import { serverClockOffset } from './deadline';
 
 export interface GameClientState {
   snapshot: GameStateSnapshot | null;
   lastSequence: number;
+  /** Difference between the authoritative server clock and this device clock. */
+  serverTimeOffsetMs: number;
   /** null means a reconnect cannot reconstruct how many players already answered. */
   answeredPlayerIds: string[] | null;
   acceptedQuestionIds: number[];
@@ -21,6 +24,7 @@ export interface GameClientState {
 export const initialGameState: GameClientState = {
   snapshot: null,
   lastSequence: 0,
+  serverTimeOffsetMs: 0,
   answeredPlayerIds: null,
   acceptedQuestionIds: [],
   selectedAnswerIds: {},
@@ -75,6 +79,7 @@ function fullState(
   return {
     snapshot: message.payload,
     lastSequence: Math.max(state.lastSequence, message.sequence),
+    serverTimeOffsetMs: state.serverTimeOffsetMs,
     answeredPlayerIds,
     acceptedQuestionIds: state.acceptedQuestionIds,
     selectedAnswerIds: state.selectedAnswerIds,
@@ -99,6 +104,10 @@ export function gameReducer(state: GameClientState, action: GameStateAction): Ga
     };
   }
   const message = action.message;
+  const nextOffset = serverClockOffset(message.server_time, message.received_at_ms);
+  if (nextOffset !== undefined && nextOffset !== state.serverTimeOffsetMs) {
+    state = { ...state, serverTimeOffsetMs: nextOffset };
+  }
 
   switch (message.type) {
     case 'state':

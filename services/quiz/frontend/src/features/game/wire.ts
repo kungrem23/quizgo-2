@@ -76,6 +76,10 @@ function optionalString(value: unknown, name: string): string | undefined {
   return value === undefined ? undefined : string(value, name);
 }
 
+function optionalPositiveInteger(value: unknown, name: string): number | undefined {
+  return value === undefined ? undefined : positiveInteger(value, name);
+}
+
 function parsePhase(value: unknown): GamePhase {
   const parsed = string(value, 'phase') as GamePhase;
   if (!phases.has(parsed)) throw new GameProtocolError(`unknown game phase: ${parsed}`);
@@ -121,6 +125,7 @@ export function parseGameState(value: unknown): GameStateSnapshot {
     game_id: string(item.game_id, 'state.game_id'),
     code: string(item.code, 'state.code'),
     quiz_title: string(item.quiz_title, 'state.quiz_title'),
+    total_questions: optionalPositiveInteger(item.total_questions, 'state.total_questions'),
     phase: parsePhase(item.phase),
     players: array(item.players, 'state.players', parsePlayer),
     current_question_index: integer(item.current_question_index, 'state.current_question_index'),
@@ -182,7 +187,10 @@ function parseQuestionClosed(value: unknown): QuestionClosedPayload {
   };
 }
 
-export function parseServerMessage(raw: string | unknown): GameServerMessage {
+export function parseServerMessage(
+  raw: string | unknown,
+  receivedAtMs = Date.now(),
+): GameServerMessage {
   let decoded: unknown = raw;
   if (typeof raw === 'string') {
     try {
@@ -196,10 +204,18 @@ export function parseServerMessage(raw: string | unknown): GameServerMessage {
   const sequence = integer(message.sequence, 'message.sequence');
   if (sequence < 0) throw new GameProtocolError('message.sequence must not be negative');
   const requestID = optionalString(message.request_id, 'message.request_id');
+  const serverTime = optionalString(message.server_time, 'message.server_time');
   const envelope = <Type extends GameServerMessage['type'], Payload>(
     envelopeType: Type,
     payload: Payload,
-  ) => ({ type: envelopeType, request_id: requestID, sequence, payload });
+  ) => ({
+    type: envelopeType,
+    request_id: requestID,
+    sequence,
+    server_time: serverTime,
+    received_at_ms: receivedAtMs,
+    payload,
+  });
 
   switch (type) {
     case 'joined':

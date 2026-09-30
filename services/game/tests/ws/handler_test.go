@@ -65,10 +65,11 @@ func (r *repositoryStub) GetByCode(_ context.Context, code string) (game.Game, e
 }
 
 type serverMessage struct {
-	Type      string          `json:"type"`
-	RequestID string          `json:"request_id,omitempty"`
-	Sequence  uint64          `json:"sequence"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
+	Type       string          `json:"type"`
+	RequestID  string          `json:"request_id,omitempty"`
+	Sequence   uint64          `json:"sequence"`
+	ServerTime time.Time       `json:"server_time"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
 }
 
 type joinedPayload struct {
@@ -106,6 +107,9 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	defer playerConnection.Close(websocket.StatusNormalClosure, "test complete")
 	writeClientMessage(t, ctx, playerConnection, "join", "join-1", map[string]any{"code": created.Game.Code, "nickname": "Alice"})
 	joined := waitForMessage(t, ctx, playerConnection, "joined")
+	if joined.ServerTime.IsZero() || joined.ServerTime.Location() != time.UTC {
+		t.Fatalf("joined server_time = %v, want a UTC timestamp", joined.ServerTime)
+	}
 	var joinedData joinedPayload
 	if err := json.Unmarshal(joined.Payload, &joinedData); err != nil {
 		t.Fatal(err)
@@ -128,7 +132,7 @@ func TestWebSocketJoinStartAndAnswer(t *testing.T) {
 	writeClientMessage(t, ctx, hostConnection, "start", "start-1", nil)
 	assertCommandAck(t, waitForMessage(t, ctx, hostConnection, "command_accepted"), "start-1", true)
 	countdown := waitForMessage(t, ctx, playerConnection, "countdown_started")
-	if !strings.Contains(string(countdown.Payload), `"phase":"countdown"`) || !strings.Contains(string(countdown.Payload), `"countdown_ends_at"`) || strings.Contains(string(countdown.Payload), `"current_question"`) {
+	if !strings.Contains(string(countdown.Payload), `"phase":"countdown"`) || !strings.Contains(string(countdown.Payload), `"countdown_ends_at"`) || !strings.Contains(string(countdown.Payload), `"total_questions":1`) || strings.Contains(string(countdown.Payload), `"current_question"`) {
 		t.Fatalf("unexpected countdown event: %#v", countdown)
 	}
 	opened := waitForMessage(t, ctx, playerConnection, "question_opened")

@@ -281,7 +281,7 @@ describe('player join route flow', () => {
     expect(
       within(playerView.container).getByRole('heading', { name: 'Время вышло!' }),
     ).toBeTruthy();
-    expect(within(playerView.container).queryByRole('heading', { name: 'Вопрос 1?' })).toBeNull();
+    expect(within(playerView.container).getByRole('heading', { name: 'Вопрос 1?' })).toBeTruthy();
 
     await user.click(
       await within(hostView.container).findByRole('button', { name: 'Следующий вопрос' }),
@@ -399,7 +399,9 @@ describe('player join route flow', () => {
       await within(hostView.container).findByRole('heading', { name: 'Финальные результаты' }),
     ).toBeTruthy();
     expect(within(hostView.container).getByLabelText('1 место')).toBeTruthy();
-    expect(within(hostView.container).getByRole('button', { name: 'Сыграть ещё раз' })).toBeTruthy();
+    expect(
+      within(hostView.container).getByRole('button', { name: 'Сыграть ещё раз' }),
+    ).toBeTruthy();
     expect(
       within(hostView.container).queryByRole('button', { name: 'Следующий вопрос' }),
     ).toBeNull();

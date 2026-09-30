@@ -1,5 +1,5 @@
-import { useRef, useState, type CSSProperties } from 'react';
-import { Clock3, Wifi } from 'lucide-react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Check, Wifi } from 'lucide-react';
 import { QuizImage } from '../../shared/ui/QuizImage';
 import { AnswerGrid } from './AnswerGrid';
 import { deadlineProgress, useDeadline, type DeadlineState } from './deadline';
@@ -16,95 +16,49 @@ function createAnswerRequestID(questionID: number): string {
   return `answer-${questionID}-${suffix}`;
 }
 
-function QuestionHeader({
-  snapshot,
-  status,
-  remainingSeconds,
-  action,
-}: {
-  snapshot: GameStateSnapshot;
-  status: GameSocketStatus;
-  remainingSeconds: number;
-  action?: React.ReactNode;
-}) {
-  return (
-    <header className="game-question-header">
-      <span className="game-question-brand">
-        QuizGo<span>.</span>
-      </span>
-      <span className="game-question-number">Вопрос {snapshot.current_question_index + 1}</span>
-      <strong>{snapshot.quiz_title}</strong>
-      {action}
-      <span className={`game-question-online ${status.state === 'open' ? 'is-connected' : ''}`}>
-        <Wifi size={14} />
-        {status.state === 'open' ? 'В сети' : 'Нет соединения'}
-      </span>
-      <span className="game-question-time">
-        <Clock3 size={15} />
-        {remainingSeconds} с
-      </span>
-    </header>
-  );
+function questionLabel(snapshot: GameStateSnapshot): string {
+  const current = snapshot.current_question_index + 1;
+  return snapshot.total_questions
+    ? `Вопрос ${current} из ${snapshot.total_questions}`
+    : `Вопрос ${current}`;
 }
 
-function QuestionCard({ snapshot }: { snapshot: GameStateSnapshot }) {
-  const question = snapshot.current_question!;
-  return (
-    <section className={`game-question-card ${question.image_id ? 'has-image' : ''}`}>
-      {question.image_id && (
-        <QuizImage
-          className="game-question-image"
-          imageId={question.image_id}
-          alt="Иллюстрация к вопросу"
-        />
-      )}
-      <h1>{question.text}</h1>
-    </section>
-  );
-}
-
-function QuestionShell({
-  snapshot,
-  status,
+function QuestionProgress({
   deadline,
-  headerAction,
-  children,
+  snapshot,
 }: {
-  snapshot: GameStateSnapshot;
-  status: GameSocketStatus;
   deadline: DeadlineState;
-  headerAction?: React.ReactNode;
-  children: React.ReactNode;
+  snapshot: GameStateSnapshot;
 }) {
   const question = snapshot.current_question!;
   const progress = deadlineProgress(deadline.remainingMs, question.time_limit_seconds);
-  const timerStyle = { '--question-time-progress': `${progress}%` } as CSSProperties;
-
+  const style = { '--question-time-progress': `${progress}%` } as CSSProperties;
   return (
-    <main className="game-question-page" style={timerStyle}>
-      <div className="game-question-progress" aria-hidden="true">
-        <span />
-      </div>
-      <QuestionHeader
-        snapshot={snapshot}
-        status={status}
-        remainingSeconds={deadline.remainingSeconds}
-        action={headerAction}
-      />
-      <div className="game-question-main">
-        <QuestionCard snapshot={snapshot} />
-        {children}
-        {deadline.expired && (
-          <div className="game-question-expired" role="status">
-            Время вышло. Ожидаем перехода от game-service…
-          </div>
-        )}
-      </div>
-    </main>
+    <div className="game-question-progress" style={style} aria-hidden="true">
+      <span />
+    </div>
   );
 }
 
-export function HostQuestionScreen({
+function QuestionMedia({ snapshot }: { snapshot: GameStateSnapshot }) {
+  const imageID = snapshot.current_question?.image_id;
+  if (!imageID) return null;
+  return (
+    <div className="game-question-media">
+      <QuizImage className="game-question-image" imageId={imageID} alt="Иллюстрация к вопросу" />
+    </div>
+  );
+}
+
+function DeadlineNotice({ deadline }: { deadline: DeadlineState }) {
+  return deadline.expired ? (
+    <div className="game-question-expired" role="status">
+      Время вышло. Ожидаем перехода от game-service…
+    </div>
+  ) : null;
+}
+
+function HostQuestionHeader({
   snapshot,
   status,
   answeredPlayerIds,
@@ -115,28 +69,100 @@ export function HostQuestionScreen({
   answeredPlayerIds: string[] | null;
   sendCommand: SendCommand;
 }) {
-  const question = snapshot.current_question!;
-  const deadline = useDeadline(snapshot.question_closes_at);
   return (
-    <QuestionShell
-      snapshot={snapshot}
-      status={status}
-      deadline={deadline}
-      headerAction={
-        <HostFinishButton
-          className="question-finish"
-          sendCommand={sendCommand}
-          disabled={status.state !== 'open'}
-        />
-      }
-    >
-      <div className="host-answer-progress" aria-live="polite">
-        <strong>{answeredPlayerIds === null ? '—' : answeredPlayerIds.length}</strong>
-        <span>из {snapshot.players.length} игроков ответили</span>
-        {answeredPlayerIds === null && <small>Счётчик недоступен после переподключения</small>}
+    <header className="host-question-header">
+      <span className="game-question-brand">QuizGo</span>
+      <span className="game-question-number">{questionLabel(snapshot)}</span>
+      <span className="host-question-answered">
+        <i aria-hidden="true" />
+        Ответили: <strong>
+          {answeredPlayerIds === null ? '—' : answeredPlayerIds.length}
+        </strong> из {snapshot.players.length}
+      </span>
+      <span className={`game-question-online ${status.state === 'open' ? 'is-connected' : ''}`}>
+        <Wifi size={14} />
+        {status.state === 'open' ? 'В сети' : 'Нет соединения'}
+      </span>
+      <HostFinishButton
+        className="question-finish"
+        sendCommand={sendCommand}
+        disabled={status.state !== 'open'}
+      />
+    </header>
+  );
+}
+
+export function HostQuestionScreen({
+  snapshot,
+  status,
+  answeredPlayerIds,
+  sendCommand,
+  serverTimeOffsetMs = 0,
+}: {
+  snapshot: GameStateSnapshot;
+  status: GameSocketStatus;
+  answeredPlayerIds: string[] | null;
+  sendCommand: SendCommand;
+  serverTimeOffsetMs?: number;
+}) {
+  const question = snapshot.current_question!;
+  const deadline = useDeadline(snapshot.question_closes_at, serverTimeOffsetMs);
+  return (
+    <main className="game-question-page is-host">
+      <QuestionProgress deadline={deadline} snapshot={snapshot} />
+      <HostQuestionHeader
+        snapshot={snapshot}
+        status={status}
+        answeredPlayerIds={answeredPlayerIds}
+        sendCommand={sendCommand}
+      />
+      <div className="host-question-main">
+        <section className="host-question-prompt">
+          <span className="host-question-timer" role="timer">
+            {deadline.remainingSeconds}
+          </span>
+          <h1>{question.text}</h1>
+        </section>
+        <QuestionMedia snapshot={snapshot} />
+        {answeredPlayerIds === null && (
+          <p className="host-answer-unavailable">
+            Счётчик ответов недоступен после переподключения
+          </p>
+        )}
+        <AnswerGrid answers={question.answers} />
+        <DeadlineNotice deadline={deadline} />
       </div>
-      <AnswerGrid answers={question.answers} />
-    </QuestionShell>
+    </main>
+  );
+}
+
+function PlayerQuestionLayout({
+  snapshot,
+  deadline,
+  instruction,
+  children,
+}: {
+  snapshot: GameStateSnapshot;
+  deadline: DeadlineState;
+  instruction: ReactNode;
+  children: ReactNode;
+}) {
+  const question = snapshot.current_question!;
+  return (
+    <main className="game-question-page is-player">
+      <QuestionProgress deadline={deadline} snapshot={snapshot} />
+      <div className="player-question-main">
+        <div className="player-question-meta">
+          <span>{questionLabel(snapshot)}</span>
+          <strong role="timer">{deadline.remainingSeconds} с</strong>
+        </div>
+        <h1>{question.text}</h1>
+        <QuestionMedia snapshot={snapshot} />
+        <p className="player-answer-instruction">{instruction}</p>
+        {children}
+        <DeadlineNotice deadline={deadline} />
+      </div>
+    </main>
   );
 }
 
@@ -158,6 +184,7 @@ export function PlayerQuestionScreen({
   selectedAnswerId: recordedAnswerId,
   onAnswerSelected,
   sendCommand,
+  serverTimeOffsetMs = 0,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
@@ -165,9 +192,10 @@ export function PlayerQuestionScreen({
   selectedAnswerId?: number | null;
   onAnswerSelected?: (questionId: number, answerId: number) => void;
   sendCommand: SendCommand;
+  serverTimeOffsetMs?: number;
 }) {
   const question = snapshot.current_question!;
-  const deadline = useDeadline(snapshot.question_closes_at);
+  const deadline = useDeadline(snapshot.question_closes_at, serverTimeOffsetMs);
   const [localAnswerId, setLocalAnswerId] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
@@ -196,19 +224,24 @@ export function PlayerQuestionScreen({
     }
   }
 
+  const instruction = accepted ? (
+    <span className="player-answer-accepted">
+      <Check size={15} /> Ответ принят. Ожидаем завершения вопроса.
+    </span>
+  ) : selectedAnswerId !== null ? (
+    pending ? (
+      'Отправляем ответ…'
+    ) : (
+      'Ожидаем подтверждения game-service…'
+    )
+  ) : deadline.expired ? (
+    'Время для ответа закончилось.'
+  ) : (
+    'Выберите один вариант — изменить ответ нельзя'
+  );
+
   return (
-    <QuestionShell snapshot={snapshot} status={status} deadline={deadline}>
-      <p className="player-answer-instruction">
-        {accepted
-          ? 'Ответ принят. Ожидаем завершения вопроса.'
-          : selectedAnswerId !== null
-            ? pending
-              ? 'Отправляем ответ…'
-              : 'Ожидаем подтверждения game-service…'
-            : deadline.expired
-              ? 'Время для ответа закончилось.'
-              : 'Выберите один вариант — изменить ответ нельзя'}
-      </p>
+    <PlayerQuestionLayout snapshot={snapshot} deadline={deadline} instruction={instruction}>
       <AnswerGrid
         answers={question.answers}
         interactive
@@ -223,6 +256,6 @@ export function PlayerQuestionScreen({
           {submissionError}
         </div>
       )}
-    </QuestionShell>
+    </PlayerQuestionLayout>
   );
 }

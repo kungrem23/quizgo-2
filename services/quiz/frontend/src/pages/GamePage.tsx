@@ -69,6 +69,7 @@ function HostGameView({ quizId }: { quizId?: number }) {
         status={status}
         role="host"
         sendCommand={sendCommand}
+        serverTimeOffsetMs={game.serverTimeOffsetMs}
       />
     );
   }
@@ -79,6 +80,7 @@ function HostGameView({ quizId }: { quizId?: number }) {
         status={status}
         answeredPlayerIds={game.answeredPlayerIds}
         sendCommand={sendCommand}
+        serverTimeOffsetMs={game.serverTimeOffsetMs}
       />
     );
   }
@@ -98,7 +100,14 @@ function PlayerGameView({ nickname, playerId }: { nickname: string; playerId: st
     return <PlayerLobby nickname={nickname} />;
   }
   if (game.snapshot?.phase === 'countdown') {
-    return <CountdownScreen snapshot={game.snapshot} status={status} role="player" />;
+    return (
+      <CountdownScreen
+        snapshot={game.snapshot}
+        status={status}
+        role="player"
+        serverTimeOffsetMs={game.serverTimeOffsetMs}
+      />
+    );
   }
   if (game.snapshot?.phase === 'question_open' && game.snapshot.current_question) {
     return (
@@ -110,6 +119,7 @@ function PlayerGameView({ nickname, playerId }: { nickname: string; playerId: st
         selectedAnswerId={game.selectedAnswerIds[game.snapshot.current_question.id]}
         onAnswerSelected={recordAnswerSelection}
         sendCommand={sendCommand}
+        serverTimeOffsetMs={game.serverTimeOffsetMs}
       />
     );
   }

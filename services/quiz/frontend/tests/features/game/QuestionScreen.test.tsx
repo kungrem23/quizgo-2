@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlayerQuestionScreen } from '../../../src/features/game/QuestionScreen';
 import type { GameStateSnapshot } from '../../../src/features/game/types';
+import { api } from '../../../src/shared/api/client';
 
 const questionState: GameStateSnapshot = {
   game_id: 'game-1',
@@ -34,7 +36,66 @@ function deferred<T>() {
 describe('player question answer flow', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('keeps answers available when a fast client clock is compensated by server time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T12:05:00.000Z'));
+    const sendCommand = vi.fn(() => ({
+      requestId: 'answer-10-clock',
+      acknowledged: Promise.resolve({ duplicate: false }),
+    }));
+    render(
+      <PlayerQuestionScreen
+        snapshot={{
+          ...questionState,
+          question_closes_at: '2026-09-30T12:00:30.000000000Z',
+        }}
+        status={{ state: 'open' }}
+        acceptedQuestionIds={[]}
+        serverTimeOffsetMs={-5 * 60_000}
+        sendCommand={sendCommand}
+      />,
+    );
+
+    const firstAnswer = screen.getByRole('button', { name: /Вариант 1/ });
+    expect((firstAnswer as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(firstAnswer);
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders question images in a contain media frame without fixed dimensions', async () => {
+    vi.spyOn(api, 'imageURL').mockResolvedValue({
+      id: 'image-1',
+      url: 'https://storage.test/portrait-image',
+    });
+    const sendCommand = vi.fn(() => ({
+      requestId: 'answer-10-image',
+      acknowledged: Promise.resolve({ duplicate: false }),
+    }));
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlayerQuestionScreen
+          snapshot={{
+            ...questionState,
+            current_question: { ...questionState.current_question!, image_id: 'image-1' },
+          }}
+          status={{ state: 'open' }}
+          acceptedQuestionIds={[]}
+          sendCommand={sendCommand}
+        />
+      </QueryClientProvider>,
+    );
+
+    const image = await screen.findByRole('img', { name: 'Иллюстрация к вопросу' });
+    expect(image.classList.contains('game-question-image')).toBe(true);
+    expect(image.parentElement?.classList.contains('game-question-media')).toBe(true);
+    expect(image.hasAttribute('width')).toBe(false);
+    expect(image.hasAttribute('height')).toBe(false);
+  });
 
   it('renders every dynamic answer and locks submission through answer_accepted', async () => {
     const acknowledgement = deferred<{ duplicate: boolean }>();

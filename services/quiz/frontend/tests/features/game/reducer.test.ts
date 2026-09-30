@@ -22,6 +22,27 @@ function snapshot(sequence = 3) {
 }
 
 describe('authoritative game reducer', () => {
+  it('stores the server/client clock offset from the WebSocket envelope', () => {
+    const message = parseServerMessage(
+      {
+        type: 'state',
+        sequence: 1,
+        server_time: '2026-09-30T12:00:00.000000000Z',
+        payload: {
+          game_id: 'game-1',
+          code: 'ABC123',
+          quiz_title: 'Quiz',
+          phase: 'lobby',
+          players: [],
+          current_question_index: -1,
+        },
+      },
+      Date.UTC(2026, 8, 30, 12, 5, 0),
+    );
+    const state = gameReducer(initialGameState, { type: 'message', message });
+    expect(state.serverTimeOffsetMs).toBe(-5 * 60_000);
+  });
+
   it('upserts events with the same sequence as the state snapshot', () => {
     let state = gameReducer(initialGameState, { type: 'message', message: snapshot() });
     state = gameReducer(state, {

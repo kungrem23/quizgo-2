@@ -8,13 +8,15 @@ export function CountdownScreen({
   status,
   role,
   sendCommand,
+  serverTimeOffsetMs = 0,
 }: {
   snapshot: GameStateSnapshot;
   status: GameSocketStatus;
   role?: GameRole;
   sendCommand?: (command: GameCommand, requestId?: string) => PendingGameCommand;
+  serverTimeOffsetMs?: number;
 }) {
-  const deadline = useDeadline(snapshot.countdown_ends_at);
+  const deadline = useDeadline(snapshot.countdown_ends_at, serverTimeOffsetMs);
   const questionNumber = snapshot.current_question_index + 1;
 
   return (
@@ -31,19 +33,21 @@ export function CountdownScreen({
           disabled={status.state !== 'open'}
         />
       )}
-      <div className={`countdown-value ${deadline.expired ? 'is-expired' : ''}`} role="timer">
-        {deadline.remainingSeconds}
+      <div className="countdown-content">
+        <div className={`countdown-value ${deadline.expired ? 'is-expired' : ''}`} role="timer">
+          {deadline.remainingSeconds}
+        </div>
+        <h1>
+          {deadline.expired
+            ? 'Ожидаем вопрос от сервера…'
+            : `Приготовьтесь к вопросу ${questionNumber}!`}
+        </h1>
+        <p>
+          {deadline.expired
+            ? 'Отсчёт завершён. Состояние изменится после server event.'
+            : 'Быстрый правильный ответ приносит больше очков'}
+        </p>
       </div>
-      <h1>
-        {deadline.expired
-          ? 'Ожидаем вопрос от сервера…'
-          : `Приготовьтесь к вопросу ${questionNumber}!`}
-      </h1>
-      <p>
-        {deadline.expired
-          ? 'Отсчёт завершён. Состояние изменится после server event.'
-          : 'Быстрый правильный ответ приносит больше очков'}
-      </p>
     </main>
   );
 }

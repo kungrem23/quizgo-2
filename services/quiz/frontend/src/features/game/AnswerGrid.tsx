@@ -13,11 +13,13 @@ function AnswerContent({
   index,
   pending,
   accepted,
+  correct,
 }: {
   answer: GameAnswer;
   index: number;
   pending: boolean;
   accepted: boolean;
+  correct: boolean;
 }) {
   return (
     <>
@@ -25,6 +27,9 @@ function AnswerContent({
       <span className="game-answer-text">{answer.text}</span>
       {pending && <LoaderCircle className="spin game-answer-status" size={22} />}
       {accepted && <Check className="game-answer-status" size={24} />}
+      {correct && !accepted && (
+        <Check className="game-answer-status" size={24} aria-label="Правильный ответ" />
+      )}
     </>
   );
 }
@@ -37,6 +42,7 @@ export function AnswerGrid({
   accepted = false,
   disabled = false,
   onSelect,
+  correctAnswerIds,
 }: {
   answers: GameAnswer[];
   interactive?: boolean;
@@ -45,6 +51,7 @@ export function AnswerGrid({
   accepted?: boolean;
   disabled?: boolean;
   onSelect?: (answerId: number) => void;
+  correctAnswerIds?: number[];
 }) {
   const compact = answers.length >= 5;
   return (
@@ -54,7 +61,9 @@ export function AnswerGrid({
     >
       {answers.map((answer, index) => {
         const selected = selectedAnswerId === answer.id;
-        const className = `game-answer-card answer-tone-${index % symbols.length}${selected ? ' is-selected' : ''}${selected && accepted ? ' is-accepted' : ''}`;
+        const correct = correctAnswerIds?.includes(answer.id) ?? false;
+        const revealed = correctAnswerIds !== undefined;
+        const className = `game-answer-card answer-tone-${index % symbols.length}${selected ? ' is-selected' : ''}${selected && accepted ? ' is-accepted' : ''}${correct ? ' is-correct-answer' : ''}${revealed && !correct ? ' is-muted-answer' : ''}`;
         return interactive ? (
           <button
             key={answer.id}
@@ -69,11 +78,18 @@ export function AnswerGrid({
               index={index}
               pending={selected && pending}
               accepted={selected && accepted}
+              correct={correct}
             />
           </button>
         ) : (
           <div key={answer.id} className={className}>
-            <AnswerContent answer={answer} index={index} pending={false} accepted={false} />
+            <AnswerContent
+              answer={answer}
+              index={index}
+              pending={false}
+              accepted={false}
+              correct={correct}
+            />
           </div>
         );
       })}

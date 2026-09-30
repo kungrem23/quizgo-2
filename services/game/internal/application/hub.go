@@ -93,6 +93,7 @@ type StateView struct {
 	GameID               string        `json:"game_id"`
 	Code                 string        `json:"code"`
 	QuizTitle            string        `json:"quiz_title"`
+	TotalQuestions       int           `json:"total_questions"`
 	Phase                game.Phase    `json:"phase"`
 	Players              []PlayerView  `json:"players"`
 	CurrentQuestionIndex int           `json:"current_question_index"`
@@ -1080,7 +1081,8 @@ func cloneGame(value game.Game) game.Game {
 func stateView(value game.Game) StateView {
 	view := StateView{
 		GameID: value.ID, Code: value.Code, QuizTitle: value.Quiz.Title, Phase: value.Phase,
-		Players: leaderboard(value.Players), CurrentQuestionIndex: value.CurrentQuestionIndex,
+		TotalQuestions: len(value.Quiz.Questions),
+		Players:        leaderboard(value.Players), CurrentQuestionIndex: value.CurrentQuestionIndex,
 		CountdownEndsAt: value.CountdownEndsAt, QuestionClosesAt: value.QuestionClosesAt,
 	}
 	if question, ok := value.CurrentQuestion(); ok && (value.Phase == game.PhaseQuestionOpen || value.Phase == game.PhaseScoreboard || value.Phase == game.PhaseQuestionClosed) {

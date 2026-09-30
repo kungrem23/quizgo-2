@@ -27,6 +27,7 @@ export interface GameStateSnapshot {
   game_id: string;
   code: string;
   quiz_title: string;
+  total_questions?: number;
   phase: GamePhase;
   players: GamePlayer[];
   current_question_index: number;
@@ -82,6 +83,10 @@ interface ServerEnvelope<Type extends string, Payload> {
   type: Type;
   request_id?: string;
   sequence: number;
+  /** Server clock sample from the WebSocket envelope. Optional for older servers. */
+  server_time?: string;
+  /** Local wall-clock time captured as soon as this message was parsed. */
+  received_at_ms: number;
   payload: Payload;
 }
 

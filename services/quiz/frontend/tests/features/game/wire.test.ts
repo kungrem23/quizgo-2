@@ -5,6 +5,7 @@ const state = {
   game_id: 'game-1',
   code: 'ABC123',
   quiz_title: 'Физика',
+  total_questions: 3,
   phase: 'question_open',
   players: [{ id: 'player-1', nickname: 'Alice', score: 500 }],
   current_question_index: 0,
@@ -24,7 +25,13 @@ const state = {
 describe('game wire parser', () => {
   it('parses the public state without exposing correct answer flags', () => {
     const message = parseServerMessage(
-      JSON.stringify({ type: 'state', sequence: 4, payload: state }),
+      JSON.stringify({
+        type: 'state',
+        sequence: 4,
+        server_time: '2026-09-30T11:59:59.123456789Z',
+        payload: state,
+      }),
+      1234,
     );
     expect(message.type).toBe('state');
     if (message.type !== 'state') throw new Error('unexpected message');
@@ -33,6 +40,9 @@ describe('game wire parser', () => {
       { id: 12, text: 'Нет' },
     ]);
     expect(message.payload.question_closes_at).toBe('2026-09-30T12:00:00Z');
+    expect(message.payload.total_questions).toBe(3);
+    expect(message.server_time).toBe('2026-09-30T11:59:59.123456789Z');
+    expect(message.received_at_ms).toBe(1234);
   });
 
   it('parses question_closed separately from a full state snapshot', () => {
