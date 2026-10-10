@@ -80,4 +80,53 @@ func TestSeedQuizMigration(t *testing.T) {
 	if correct != "Осьминог|Мёд|Пурпурный|Пакман|Коала|Банан|В ухе|Консервная банка|Галлий|Слон" {
 		t.Fatalf("unexpected correct answers: %q", correct)
 	}
+
+	expectedImages := map[int]string{
+		1:  "d0b66245-e945-4339-b99e-585b2f83a87d",
+		2:  "",
+		3:  "61627a9d-e2fb-41c1-9784-d15739671565",
+		4:  "5058cb76-2217-45ed-b6ae-627fa7822efd",
+		5:  "b22da69c-b86d-4f8d-a779-db6c50a6496e",
+		6:  "a3d24e86-d685-4ff1-93e0-80b6c20999b5",
+		7:  "18c0ba81-094a-42cf-83de-a9b4e53d13ae",
+		8:  "",
+		9:  "",
+		10: "de5e1abe-2e94-4817-848c-db44e8a2126d",
+	}
+	rows, err := db.Query(`SELECT q.position, COALESCE(q.image_id, '') FROM questions q JOIN quizzes quiz ON quiz.id=q.quiz_id JOIN users u ON u.id=quiz.author_id WHERE u.username='username' AND quiz.title='Удивительные факты' ORDER BY q.position`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var position int
+		var imageID string
+		if err = rows.Scan(&position, &imageID); err != nil {
+			t.Fatal(err)
+		}
+		if imageID != expectedImages[position] {
+			t.Errorf("question %d image ID = %q, want %q", position, imageID, expectedImages[position])
+		}
+		delete(expectedImages, position)
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(expectedImages) != 0 {
+		t.Fatalf("questions missing from image mapping: %v", expectedImages)
+	}
+
+	if _, err = db.Exec(`UPDATE questions SET image_id=NULL WHERE quiz_id=(SELECT q.id FROM quizzes q JOIN users u ON u.id=q.author_id WHERE u.username='username' AND q.title='Удивительные факты') AND position=1`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ApplyMigrations(db); err != nil {
+		t.Fatalf("migration after an editor change failed: %v", err)
+	}
+	var retainedImageID string
+	if err = db.QueryRow(`SELECT COALESCE(question.image_id, '') FROM questions question JOIN quizzes quiz ON quiz.id=question.quiz_id JOIN users u ON u.id=quiz.author_id WHERE u.username='username' AND quiz.title='Удивительные факты' AND question.position=1`).Scan(&retainedImageID); err != nil {
+		t.Fatal(err)
+	}
+	if retainedImageID != "" {
+		t.Fatalf("repeat migration overwrote an editor change with image %q", retainedImageID)
+	}
 }
