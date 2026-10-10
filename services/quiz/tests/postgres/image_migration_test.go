@@ -67,15 +67,19 @@ func TestLegacyImagesMigrateWithoutLosingSourceOnFailure(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = db.Exec(`INSERT INTO users (id,username,password_hash) VALUES (1,'author','hash'); INSERT INTO quizzes (id,title,author_id) VALUES (1,'Legacy',1)`); err != nil {
+	var authorID, quizID int
+	if err = db.QueryRow(`INSERT INTO users (username,password_hash) VALUES ('author','hash') RETURNING id`).Scan(&authorID); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRow(`INSERT INTO quizzes (title,author_id) VALUES ('Legacy',$1) RETURNING id`, authorID).Scan(&quizID); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"image-a", "image-b"} {
-		if _, err = db.Exec(`INSERT INTO images (id,author_id,image_url,content_type,content) VALUES ($1,1,$2,'image/png',$3)`, id, "/api/images/"+id, []byte("bytes-"+id)); err != nil {
+		if _, err = db.Exec(`INSERT INTO images (id,author_id,image_url,content_type,content) VALUES ($1,$2,$3,'image/png',$4)`, id, authorID, "/api/images/"+id, []byte("bytes-"+id)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err = db.Exec(`INSERT INTO questions (quiz_id,position,text_content,image_id) VALUES (1,1,'Legacy question','image-a')`); err != nil {
+	if _, err = db.Exec(`INSERT INTO questions (quiz_id,position,text_content,image_id) VALUES ($1,1,'Legacy question','image-a')`, quizID); err != nil {
 		t.Fatal(err)
 	}
 	if err = ApplyMigrations(db); err == nil {
@@ -103,7 +107,7 @@ func TestLegacyImagesMigrateWithoutLosingSourceOnFailure(t *testing.T) {
 		t.Fatalf("non-metadata columns remain: %d %v", cols, err)
 	}
 	var imageID string
-	if err = db.QueryRow(`SELECT image_id FROM questions WHERE quiz_id=1`).Scan(&imageID); err != nil || imageID != "image-a" {
+	if err = db.QueryRow(`SELECT image_id FROM questions WHERE quiz_id=$1`, quizID).Scan(&imageID); err != nil || imageID != "image-a" {
 		t.Fatal("question reference changed")
 	}
 	if err = ApplyMigrations(db, store); err != nil {
