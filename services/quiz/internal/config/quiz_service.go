@@ -13,6 +13,7 @@ type QuizService struct {
 	HTTPPort string
 	GRPC     GRPC
 	JWT      JWT
+	Refresh  Refresh
 	Postgres Postgres
 	S3       imagestore.Config
 }
@@ -22,6 +23,11 @@ type JWT struct {
 	Issuer   string
 	Audience string
 	TTL      time.Duration
+}
+
+type Refresh struct {
+	TTL          time.Duration
+	CookieSecure bool
 }
 
 type GRPC struct {
@@ -58,6 +64,7 @@ func LoadQuizService() (QuizService, error) {
 			Issuer:   envOrDefault("JWT_ISSUER", "quizgo-auth"),
 			Audience: envOrDefault("JWT_AUDIENCE", "quizgo-crud"),
 		},
+		Refresh: Refresh{},
 		Postgres: Postgres{
 			Host:     envOrDefault("POSTGRES_HOST", "localhost"),
 			Port:     envOrDefault("POSTGRES_PORT", "5432"),
@@ -74,6 +81,14 @@ func LoadQuizService() (QuizService, error) {
 	}
 	if len(config.JWT.Secret) < 32 {
 		return QuizService{}, fmt.Errorf("JWT_SECRET must contain at least 32 bytes")
+	}
+	config.Refresh.TTL, err = time.ParseDuration(envOrDefault("REFRESH_TOKEN_TTL", "720h"))
+	if err != nil || config.Refresh.TTL < time.Minute || config.Refresh.TTL > 90*24*time.Hour {
+		return QuizService{}, fmt.Errorf("REFRESH_TOKEN_TTL must be between 1m and 2160h")
+	}
+	config.Refresh.CookieSecure, err = strconv.ParseBool(envOrDefault("REFRESH_COOKIE_SECURE", "true"))
+	if err != nil {
+		return QuizService{}, fmt.Errorf("REFRESH_COOKIE_SECURE must be true or false")
 	}
 	if len(config.GRPC.ServiceToken) < 32 {
 		return QuizService{}, fmt.Errorf("QUIZ_GRPC_SERVICE_TOKEN must contain at least 32 bytes")

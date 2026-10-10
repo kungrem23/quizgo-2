@@ -22,10 +22,20 @@ Swagger отправляет запросы на тот же хост и пор�
 Для защищённых операций получите токен:
 
 ```sh
-curl -X POST http://localhost:8080/auth/login \
+curl -c cookies.txt -X POST http://localhost:8080/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","password":"secret123"}'
 ```
+
+Ответ содержит короткоживущий access token, а refresh token устанавливается как
+`HttpOnly` cookie. Обновление и завершение сессии:
+
+```sh
+curl -b cookies.txt -c cookies.txt -X POST http://localhost:8080/auth/refresh
+curl -b cookies.txt -c cookies.txt -X POST http://localhost:8080/auth/logout
+```
+
+Refresh token не возвращается в JSON и не должен сохраняться frontend-кодом.
 
 Пользователя можно создать через `POST /auth/register` с теми же полями.
 В Swagger нажмите **Authorize** и вставьте значение `token` целиком:

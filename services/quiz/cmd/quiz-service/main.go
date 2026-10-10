@@ -18,6 +18,7 @@ import (
 	"github.com/kungrem23/quizgo/services/quiz/internal/domain"
 	quizgrpc "github.com/kungrem23/quizgo/services/quiz/internal/grpc/quizserver"
 	quizhttp "github.com/kungrem23/quizgo/services/quiz/internal/http"
+	authhandler "github.com/kungrem23/quizgo/services/quiz/internal/http/handlers/auth"
 	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware"
 	"github.com/kungrem23/quizgo/services/quiz/internal/platform/postgres"
 	imagestore "github.com/kungrem23/quizgo/services/quiz/internal/s3"
@@ -44,6 +45,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure access tokens: %w", err)
 	}
+	refreshTokens, err := authn.NewRefreshManager(settings.Refresh.TTL)
+	if err != nil {
+		return fmt.Errorf("configure refresh tokens: %w", err)
+	}
 	var images quiz.ImageStore
 	if settings.S3.Bucket != "" {
 		images, err = imagestore.New(context.Background(), settings.S3)
@@ -62,8 +67,11 @@ func run() error {
 	}
 	defer db.Close()
 
-	service := quiz.NewServiceWithTokens(quiz.NewPostgresRepository(db), images, tokens)
-	router := quizhttp.NewQuizRouterWithReadiness(service, db.PingContext)
+	repository := quiz.NewPostgresRepository(db)
+	service := quiz.NewServiceWithAuth(repository, images, tokens, refreshTokens, repository)
+	router := quizhttp.NewQuizRouterWithReadiness(
+		service, db.PingContext, authhandler.CookieConfig{Secure: settings.Refresh.CookieSecure},
+	)
 	if directory := os.Getenv("QUIZ_FRONTEND_DIR"); directory != "" {
 		router, err = quizhttp.WithFrontend(router, directory)
 		if err != nil {

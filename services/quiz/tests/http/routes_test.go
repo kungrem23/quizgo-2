@@ -26,6 +26,8 @@ func TestNewQuizRouter_RegistersRoutes(t *testing.T) {
 		{name: "liveness", method: stdhttp.MethodGet, path: "/healthz", status: stdhttp.StatusOK},
 		{name: "readiness", method: stdhttp.MethodGet, path: "/readyz", status: stdhttp.StatusOK},
 		{name: "register", method: stdhttp.MethodPost, path: "/auth/register", status: stdhttp.StatusBadRequest},
+		{name: "refresh", method: stdhttp.MethodPost, path: "/auth/refresh", status: stdhttp.StatusUnauthorized},
+		{name: "logout", method: stdhttp.MethodPost, path: "/auth/logout", status: stdhttp.StatusNoContent},
 		{name: "create quiz protected", method: stdhttp.MethodPost, path: "/api/quizzes", status: stdhttp.StatusUnauthorized},
 		{name: "list quizzes route", method: stdhttp.MethodPut, path: "/api/quizzes", status: stdhttp.StatusMethodNotAllowed},
 		{name: "get quiz", method: stdhttp.MethodGet, path: "/api/quizzes/0", status: stdhttp.StatusBadRequest},

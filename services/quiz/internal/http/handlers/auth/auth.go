@@ -6,19 +6,33 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/kungrem23/quizgo/services/quiz/internal/authn"
 	"github.com/kungrem23/quizgo/services/quiz/internal/domain"
 	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware/respond"
 )
 
 type AuthHandler struct {
-	service *quiz.Service
+	service      *quiz.Service
+	cookieSecure bool
 }
 
-func NewAuthHandler(service *quiz.Service) *AuthHandler {
-	return &AuthHandler{service: service}
+type CookieConfig struct {
+	Secure bool
+}
+
+const refreshCookieName = "quizgo_refresh"
+
+func NewAuthHandler(service *quiz.Service, configs ...CookieConfig) *AuthHandler {
+	config := CookieConfig{Secure: true}
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	return &AuthHandler{service: service, cookieSecure: config.Secure}
 }
 
 var loginRegex = regexp.MustCompile(`^[a-zA-Z0-9._\-#$!]{3,40}$`)
@@ -82,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	token, err := h.service.Login(r.Context(), req.Username, req.Password)
+	session, err := h.service.LoginSession(r.Context(), req.Username, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, quiz.ErrInvalidUsername), errors.Is(err, quiz.ErrInvalidPassword):
@@ -98,7 +112,87 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	respond.WriteJSON(w, http.StatusOK, LoginResponse{Token: "Bearer " + token})
+	if session.RefreshToken != "" {
+		h.setRefreshCookie(w, session.RefreshToken, session.RefreshExpiresAt)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	respond.WriteJSON(w, http.StatusOK, LoginResponse{Token: "Bearer " + session.AccessToken})
+}
+
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !sameOrigin(r) {
+		respond.WriteJSON(w, http.StatusForbidden, respond.ErrorResponse{Error: "forbidden"})
+		return
+	}
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || cookie.Value == "" || h.service == nil {
+		h.clearRefreshCookie(w)
+		respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{Error: "invalid refresh token"})
+		return
+	}
+	session, err := h.service.RefreshSession(r.Context(), cookie.Value)
+	if err != nil {
+		if errors.Is(err, authn.ErrInvalidRefreshToken) {
+			h.clearRefreshCookie(w)
+			respond.WriteJSON(w, http.StatusUnauthorized, respond.ErrorResponse{Error: "invalid refresh token"})
+			return
+		}
+		log.Printf("Rotating refresh token error: %v", err)
+		respond.WriteJSON(w, http.StatusInternalServerError, respond.ErrorResponse{Error: "server error"})
+		return
+	}
+	h.setRefreshCookie(w, session.RefreshToken, session.RefreshExpiresAt)
+	respond.WriteJSON(w, http.StatusOK, LoginResponse{Token: "Bearer " + session.AccessToken})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !sameOrigin(r) {
+		respond.WriteJSON(w, http.StatusForbidden, respond.ErrorResponse{Error: "forbidden"})
+		return
+	}
+	cookie, cookieErr := r.Cookie(refreshCookieName)
+	h.clearRefreshCookie(w)
+	if cookieErr == nil && cookie.Value != "" && h.service != nil {
+		if err := h.service.LogoutSession(r.Context(), cookie.Value); err != nil &&
+			!errors.Is(err, authn.ErrInvalidRefreshToken) {
+			log.Printf("Revoking refresh token error: %v", err)
+			respond.WriteJSON(w, http.StatusInternalServerError, respond.ErrorResponse{Error: "server error"})
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	maxAge := int(time.Until(expiresAt).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: refreshCookieName, Value: token, Path: "/auth", Expires: expiresAt,
+		MaxAge: maxAge, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func (h *AuthHandler) clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name: refreshCookieName, Value: "", Path: "/auth", Expires: time.Unix(0, 0),
+		MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, r.Host)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {

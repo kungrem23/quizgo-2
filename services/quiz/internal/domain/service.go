@@ -5,15 +5,18 @@ import (
 	"database/sql"
 	// "regexp"
 	"errors"
+	"time"
 
 	"github.com/kungrem23/quizgo/services/quiz/internal/authn"
 	"github.com/kungrem23/quizgo/services/quiz/internal/security"
 )
 
 type Service struct {
-	repo   Repository
-	images ImageStore
-	tokens *authn.Manager
+	repo          Repository
+	images        ImageStore
+	tokens        *authn.Manager
+	refreshTokens *authn.RefreshManager
+	refreshStore  RefreshSessionStore
 }
 
 func NewService(r Repository, stores ...ImageStore) *Service {
@@ -26,6 +29,19 @@ func NewService(r Repository, stores ...ImageStore) *Service {
 
 func NewServiceWithTokens(r Repository, images ImageStore, tokens *authn.Manager) *Service {
 	return &Service{repo: r, images: images, tokens: tokens}
+}
+
+func NewServiceWithAuth(
+	r Repository,
+	images ImageStore,
+	tokens *authn.Manager,
+	refreshTokens *authn.RefreshManager,
+	refreshStore RefreshSessionStore,
+) *Service {
+	return &Service{
+		repo: r, images: images, tokens: tokens,
+		refreshTokens: refreshTokens, refreshStore: refreshStore,
+	}
 }
 
 func (s *Service) VerifyAccessToken(raw string) (int, error) {
@@ -125,23 +141,108 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 var ErrInvalidUsername = errors.New("invalid username")
 var ErrInvalidPassword = errors.New("invalid password")
 
-func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
-	user, err := s.GetUserByUsername(ctx, username)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrInvalidUsername
-		} else {
-			return "", err
-		}
-	}
+type AuthSession struct {
+	AccessToken      string
+	RefreshToken     string
+	RefreshExpiresAt time.Time
+}
 
-	if !security.CheckPasswordHash(password, user.PasswordHash) {
-		return "", ErrInvalidPassword
+func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
+	user, err := s.authenticate(ctx, username, password)
+	if err != nil {
+		return "", err
 	}
 	if s.tokens == nil {
 		return "", authn.ErrInvalidToken
 	}
 	return s.tokens.IssueAccessToken(user.Id)
+}
+
+func (s *Service) LoginSession(ctx context.Context, username, password string) (AuthSession, error) {
+	user, err := s.authenticate(ctx, username, password)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	if s.tokens == nil {
+		return AuthSession{}, authn.ErrInvalidToken
+	}
+	accessToken, err := s.tokens.IssueAccessToken(user.Id)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	result := AuthSession{AccessToken: accessToken}
+	if s.refreshTokens == nil || s.refreshStore == nil {
+		return result, nil
+	}
+	credential, err := s.refreshTokens.Issue()
+	if err != nil {
+		return AuthSession{}, err
+	}
+	now := s.refreshTokens.Now()
+	err = s.refreshStore.CreateRefreshSession(ctx, RefreshSession{
+		ID: credential.SessionID, UserID: user.Id, SecretHash: credential.Hash,
+		CreatedAt: now, ExpiresAt: credential.ExpiresAt,
+	})
+	if err != nil {
+		return AuthSession{}, err
+	}
+	result.RefreshToken = credential.Raw
+	result.RefreshExpiresAt = credential.ExpiresAt
+	return result, nil
+}
+
+func (s *Service) RefreshSession(ctx context.Context, raw string) (AuthSession, error) {
+	if s == nil || s.tokens == nil || s.refreshTokens == nil || s.refreshStore == nil {
+		return AuthSession{}, authn.ErrInvalidRefreshToken
+	}
+	sessionID, presentedHash, err := s.refreshTokens.Parse(raw)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	next, err := s.refreshTokens.Rotate(sessionID)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	userID, expiresAt, err := s.refreshStore.RotateRefreshSession(
+		ctx, sessionID, presentedHash, next.Hash, s.refreshTokens.Now(),
+	)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	accessToken, err := s.tokens.IssueAccessToken(userID)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	return AuthSession{
+		AccessToken: accessToken, RefreshToken: next.Raw, RefreshExpiresAt: expiresAt,
+	}, nil
+}
+
+func (s *Service) LogoutSession(ctx context.Context, raw string) error {
+	if s == nil || s.refreshTokens == nil || s.refreshStore == nil {
+		return authn.ErrInvalidRefreshToken
+	}
+	sessionID, presentedHash, err := s.refreshTokens.Parse(raw)
+	if err != nil {
+		return err
+	}
+	return s.refreshStore.RevokeRefreshSession(ctx, sessionID, presentedHash, s.refreshTokens.Now())
+}
+
+func (s *Service) authenticate(ctx context.Context, username, password string) (User, error) {
+	user, err := s.GetUserByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrInvalidUsername
+		} else {
+			return User{}, err
+		}
+	}
+
+	if !security.CheckPasswordHash(password, user.PasswordHash) {
+		return User{}, ErrInvalidPassword
+	}
+	return user, nil
 }
 
 var ErrTakenUsername = errors.New("user with this username already exists")

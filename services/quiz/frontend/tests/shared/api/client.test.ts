@@ -33,6 +33,47 @@ describe('session-aware API client', () => {
     sessionStorage.clear();
   });
 
+  it('refreshes the access token and retries the protected request once', async () => {
+    setAuthorization('expired-token');
+    let protectedCalls = 0;
+    const fetchMock = vi.fn(async (path: string | URL | Request, options?: RequestInit) => {
+      if (path === '/auth/refresh')
+        return new Response(JSON.stringify({ token: 'Bearer renewed-token' }), { status: 200 });
+      protectedCalls += 1;
+      if (protectedCalls === 1)
+        return new Response(JSON.stringify({ error: 'invalid token' }), { status: 401 });
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer renewed-token');
+      return new Response(JSON.stringify({ id: 42, username: 'alice' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(request('/api/me')).resolves.toEqual({ id: 42, username: 'alice' });
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/auth/refresh')).toHaveLength(1);
+    expect(protectedCalls).toBe(2);
+  });
+
+  it('uses one refresh request for concurrent unauthorized responses', async () => {
+    setAuthorization('expired-token');
+    let protectedCalls = 0;
+    let refreshCalls = 0;
+    const fetchMock = vi.fn(async (path: string | URL | Request) => {
+      if (path === '/auth/refresh') {
+        refreshCalls += 1;
+        await Promise.resolve();
+        return new Response(JSON.stringify({ token: 'Bearer renewed-token' }), { status: 200 });
+      }
+      protectedCalls += 1;
+      if (protectedCalls <= 2)
+        return new Response(JSON.stringify({ error: 'invalid token' }), { status: 401 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await Promise.all([request('/api/one'), request('/api/two')]);
+    expect(refreshCalls).toBe(1);
+    expect(protectedCalls).toBe(4);
+  });
+
   it.each([403, 401])('does not end the session on an ownership error (%i)', async (status) => {
     const dispatch = vi.spyOn(window, 'dispatchEvent');
     const error = status === 401 ? 'you cant edit this question' : 'forbidden';

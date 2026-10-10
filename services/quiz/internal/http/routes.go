@@ -17,7 +17,9 @@ func NewQuizRouter(service *quiz.Service) stdhttp.Handler {
 	return NewQuizRouterWithReadiness(service, nil)
 }
 
-func NewQuizRouterWithReadiness(service *quiz.Service, ready func(context.Context) error) stdhttp.Handler {
+func NewQuizRouterWithReadiness(
+	service *quiz.Service, ready func(context.Context) error, cookieConfigs ...auth.CookieConfig,
+) stdhttp.Handler {
 	router := stdhttp.NewServeMux()
 
 	router.HandleFunc("GET /healthz", func(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
@@ -38,7 +40,7 @@ func NewQuizRouterWithReadiness(service *quiz.Service, ready func(context.Contex
 	})
 	router.HandleFunc("GET /swagger/", httpSwagger.Handler(httpSwagger.URL("doc.json")))
 
-	authHandler := auth.NewAuthHandler(service)
+	authHandler := auth.NewAuthHandler(service, cookieConfigs...)
 	quizHandler := quizhandler.NewQuizHandler(service)
 	questionHandler := quizhandler.NewQuestionHandler(service)
 	answerHandler := quizhandler.NewAnswerHandler(service)
@@ -57,6 +59,8 @@ func NewQuizRouterWithReadiness(service *quiz.Service, ready func(context.Contex
 
 	router.HandleFunc("POST /auth/login", authHandler.Login)
 	router.HandleFunc("POST /auth/register", authHandler.Register)
+	router.HandleFunc("POST /auth/refresh", authHandler.Refresh)
+	router.HandleFunc("POST /auth/logout", authHandler.Logout)
 
 	router.Handle("POST /api/quizzes", authenticated(service, quizHandler.CreateQuiz))
 	router.HandleFunc("GET /api/quizzes", quizHandler.ListQuizzes)

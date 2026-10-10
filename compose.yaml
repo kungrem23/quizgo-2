@@ -64,6 +64,8 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-quizgo-auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-quizgo-crud}
       JWT_TTL: ${JWT_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-true}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ENDPOINT: ${S3_ENDPOINT:-}

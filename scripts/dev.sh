@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 if [[ ! -d services/quiz/frontend/node_modules ]]; then npm ci --prefix services/quiz/frontend; fi
 if [[ -z "${JWT_SECRET:-}" ]]; then export JWT_SECRET="$(openssl rand -hex 32)"; fi
 if [[ -z "${QUIZ_GRPC_SERVICE_TOKEN:-}" ]]; then export QUIZ_GRPC_SERVICE_TOKEN="$(openssl rand -hex 32)"; fi
+export REFRESH_COOKIE_SECURE=${REFRESH_COOKIE_SECURE:-false}
 export QUIZ_API_PROXY="http://127.0.0.1:${QUIZ_HTTP_PORT:-8080}"
 quizgo_api_pid=''
 quizgo_frontend_pid=''

@@ -7,6 +7,7 @@ import type {
   User,
 } from './types';
 let authorization = '';
+let refreshInFlight: Promise<string> | null = null;
 export function setAuthorization(token: string) {
   authorization = token ? `Bearer ${token.replace(/^Bearer\s+/i, '')}` : '';
 }
@@ -23,6 +24,7 @@ export async function request<T>(
   path: string,
   options: RequestInit = {},
   authenticated = true,
+  retryAfterRefresh = true,
 ): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !(options.body instanceof FormData))
@@ -30,7 +32,7 @@ export async function request<T>(
   if (authorization && authenticated) headers.set('Authorization', authorization);
   let response: Response;
   try {
-    response = await fetch(path, { ...options, headers });
+    response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError(
@@ -48,11 +50,44 @@ export async function request<T>(
   if (!response.ok) {
     const value = data as { error?: string; fields?: Record<string, string> } | undefined;
     const message = value?.error || 'Ошибка сервера';
-    if (response.status === 401 && authenticated && !message.startsWith('you cant'))
-      window.dispatchEvent(new Event('quizgo:session-expired'));
+    if (
+      response.status === 401 &&
+      authenticated &&
+      retryAfterRefresh &&
+      !message.startsWith('you cant')
+    ) {
+      try {
+        await refreshAuthorization();
+        return request<T>(path, options, authenticated, false);
+      } catch (error) {
+        if (!(error instanceof ApiError) || (error.status !== 401 && error.status !== 403))
+          throw error;
+        setAuthorization('');
+        window.dispatchEvent(new Event('quizgo:session-expired'));
+      }
+    }
     throw new ApiError(response.status, message, value?.fields);
   }
   return data as T;
+}
+
+export function refreshAuthorization(): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = request<{ token: string }>(
+      '/auth/refresh',
+      { method: 'POST' },
+      false,
+      false,
+    )
+      .then(({ token }) => {
+        setAuthorization(token);
+        return token;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
 }
 export function errorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return 'Что-то пошло не так. Попробуйте ещё раз.';
@@ -79,6 +114,8 @@ export const api = {
     ),
   register: (username: string, password: string) =>
     request<void>('/auth/register', { method: 'POST', body: json({ username, password }) }, false),
+  refresh: refreshAuthorization,
+  logout: () => request<void>('/auth/logout', { method: 'POST' }, false, false),
   me: () => request<User>('/api/me'),
   myQuizzes: (signal?: AbortSignal) =>
     request<QuizSummary[] | null>('/api/me/quizzes', { signal }).then((v) => v ?? []),

@@ -21,4 +21,4 @@ package docs
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description Введите Bearer <JWT>. Токен можно получить через POST /auth/login с JSON {"username":"alice","password":"secret123"}. Поле token уже содержит префикс Bearer. Регистрация: POST /auth/register с теми же полями.
+// @description Введите Bearer <JWT>. Access token можно получить через POST /auth/login с JSON {"username":"alice","password":"secret123"}. Поле token уже содержит префикс Bearer. Refresh token устанавливается в HttpOnly cookie и обновляется через POST /auth/refresh. Регистрация: POST /auth/register с теми же полями.

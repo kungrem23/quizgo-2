@@ -62,3 +62,40 @@ func TestNewManagerRejectsWeakConfiguration(t *testing.T) {
 		t.Fatal("expected weak secret to be rejected")
 	}
 }
+
+func TestRefreshManagerIssuesAndRotatesOpaqueCredentials(t *testing.T) {
+	manager, err := NewRefreshManager(24 * time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := manager.Issue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, hash, err := manager.Parse(issued.Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != issued.SessionID || string(hash) != string(issued.Hash) {
+		t.Fatalf("parsed credential does not match issued credential")
+	}
+	rotated, err := manager.Rotate(issued.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rotated.Raw == issued.Raw || rotated.SessionID != issued.SessionID || string(rotated.Hash) == string(issued.Hash) {
+		t.Fatalf("refresh credential was not rotated: before=%q after=%q", issued.Raw, rotated.Raw)
+	}
+}
+
+func TestRefreshManagerRejectsMalformedCredentials(t *testing.T) {
+	manager, err := NewRefreshManager(time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"", "not-a-token", "00000000-0000-0000-0000-000000000000.short"} {
+		if _, _, err = manager.Parse(raw); !errors.Is(err, ErrInvalidRefreshToken) {
+			t.Fatalf("Parse(%q) error = %v", raw, err)
+		}
+	}
+}

@@ -15,6 +15,8 @@ func TestLoadQuizService_FromEnvironment(t *testing.T) {
 	t.Setenv("POSTGRES_PASSWORD", "secret")
 	t.Setenv("POSTGRES_DB", "quiz_test")
 	t.Setenv("POSTGRES_SSLMODE", "require")
+	t.Setenv("REFRESH_TOKEN_TTL", "168h")
+	t.Setenv("REFRESH_COOKIE_SECURE", "false")
 
 	got, err := LoadQuizService()
 	if err != nil {
@@ -23,8 +25,17 @@ func TestLoadQuizService_FromEnvironment(t *testing.T) {
 	if got.HTTPPort != "9090" || got.GRPC.Port != "9091" || got.Postgres.Host != "postgres" ||
 		got.Postgres.Port != "5433" || got.Postgres.User != "quiz" ||
 		got.Postgres.Password != "secret" || got.Postgres.Database != "quiz_test" ||
-		got.Postgres.SSLMode != "require" {
+		got.Postgres.SSLMode != "require" || got.Refresh.TTL.String() != "168h0m0s" || got.Refresh.CookieSecure {
 		t.Fatalf("unexpected config: %#v", got)
+	}
+}
+
+func TestLoadQuizService_RejectsInvalidRefreshConfiguration(t *testing.T) {
+	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("QUIZ_GRPC_SERVICE_TOKEN", "abcdef0123456789abcdef0123456789")
+	t.Setenv("REFRESH_TOKEN_TTL", "0s")
+	if _, err := LoadQuizService(); err == nil {
+		t.Fatal("LoadQuizService expected an error")
 	}
 }
 

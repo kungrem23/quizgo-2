@@ -18,6 +18,8 @@ npm run build
 `QUIZ_API_PROXY` — адрес backend для dev-proxy, по умолчанию `http://127.0.0.1:8080`.
 Сборка использует относительные `/api` и `/auth`; frontend и backend должны быть
 доступны на одном origin. API может раздавать `dist` через `QUIZ_FRONTEND_DIR`.
+Access token хранится только в памяти приложения. После перезагрузки страницы и при
+первом `401` клиент получает новый access token через серверную `HttpOnly` refresh-cookie.
 
 - `app`: маршруты, QueryClient и провайдеры.
 - `features/auth`: сессия, повторный вход, формы.

@@ -1,23 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, setAuthorization } from '../../shared/api/client';
+import { api, refreshAuthorization, setAuthorization } from '../../shared/api/client';
 import type { User } from '../../shared/api/types';
 import { Modal } from '../../shared/ui/ui';
 import { AuthForm } from './AuthForm';
 const SESSION = 'quizgo:session';
 interface Session {
-  token: string;
   user: User;
 }
 function readSession(): Session | null {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION) || 'null');
-    return s &&
-      typeof s.token === 'string' &&
-      Number.isInteger(s.user?.id) &&
-      typeof s.user.username === 'string'
-      ? s
-      : null;
+    if (!s || !Number.isInteger(s.user?.id) || typeof s.user.username !== 'string') return null;
+    const session = { user: s.user as User };
+    sessionStorage.setItem(SESSION, JSON.stringify(session));
+    return session;
   } catch {
     return null;
   }
@@ -39,16 +36,35 @@ interface Auth {
 const AuthContext = createContext<Auth | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const query = useQueryClient();
-  const [session, setSession] = useState<Session | null>(() => {
-    const s = readSession();
-    setAuthorization(s?.token || '');
-    return s;
-  });
+  const [session, setSession] = useState<Session | null>(() => readSession());
   const [expired, setExpired] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const handler = () => setExpired(true);
     window.addEventListener('quizgo:session-expired', handler);
     return () => window.removeEventListener('quizgo:session-expired', handler);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        await refreshAuthorization();
+        const user = await api.me();
+        if (!active) return;
+        const restored = { user };
+        storeSession(restored);
+        setSession(restored);
+        setExpired(false);
+      } catch {
+        setAuthorization('');
+        if (active && readSession()) setExpired(true);
+      } finally {
+        if (active) setReady(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
   async function signIn(username: string, password: string) {
     const { token } = await api.login(username, password);
@@ -57,10 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       user = await api.me();
     } catch (e) {
-      setAuthorization(session?.token || '');
+      setAuthorization('');
       throw e;
     }
-    const next = { token, user };
+    const next = { user };
     storeSession(next);
     setSession(next);
     setExpired(false);
@@ -70,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else await query.invalidateQueries({ queryKey: ['private'] });
   }
   function signOut() {
+    void api.logout().catch(() => {});
     void query.cancelQueries();
     query.clear();
     storeSession(null);
@@ -86,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   return (
     <AuthContext.Provider value={{ user: session?.user || null, expired, signIn, signOut }}>
-      {children}
+      {ready ? children : null}
       <Modal
         open={expired && !!session}
         onOpenChange={() => {}}
