@@ -16,7 +16,7 @@ function valid(): Draft {
   q.answers[0].text_content = 'Париж';
   q.answers[0].is_correct = true;
   q.answers[1].text_content = 'Лондон';
-  return { title: 'География', revision: 1, questions: [q] };
+  return { title: 'География', visibility: 'private', revision: 1, questions: [q] };
 }
 describe('quiz drafts', () => {
   it('creates questions when randomUUID is unavailable', () => {
@@ -70,6 +70,7 @@ describe('quiz drafts', () => {
     const v = valid();
     const base = fingerprint(v);
     expect(fingerprint(reducer(v, { type: 'title', value: 'Новая тема' }))).not.toBe(base);
+    expect(fingerprint(reducer(v, { type: 'visibility', value: 'public' }))).not.toBe(base);
     expect(fingerprint(reducer(v, { type: 'remove', key: v.questions[0].key }))).not.toBe(base);
     expect(
       fingerprint(
@@ -92,6 +93,7 @@ describe('quiz drafts', () => {
     const content: QuizContent = {
       id: 1,
       author_id: 1,
+      visibility: 'public',
       title: 'Тема',
       revision: 2,
       updated_at: '',
@@ -116,7 +118,7 @@ it('does not save temporary image URLs or treat link refresh as an edit', () => 
   const q = newQuestion();
   q.image_id = 'image-1';
   q.image_url = 'https://s3.test/old-signature';
-  const draft = { title: 'Quiz', revision: 1, questions: [q] };
+  const draft = { title: 'Quiz', visibility: 'private' as const, revision: 1, questions: [q] };
   const before = JSON.stringify(payload(draft));
   q.image_url = 'https://s3.test/fresh-signature';
   expect(JSON.stringify(payload(draft))).toBe(before);

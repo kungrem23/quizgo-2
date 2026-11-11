@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kungrem23/quizgo/services/quiz/internal/authn"
+	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware"
 	"github.com/kungrem23/quizgo/services/quiz/internal/security"
 )
 
@@ -54,11 +55,26 @@ func (s *Service) VerifyAccessToken(raw string) (int, error) {
 // ==============QUIZ===============
 
 func (s *Service) GetQuiz(ctx context.Context, id int) (Quiz, error) {
-	return s.repo.GetQuiz(ctx, id)
+	v, err := s.repo.GetQuiz(ctx, id)
+	if err != nil {
+		return v, err
+	}
+	authorID, visibility, err := s.repo.GetQuizVisibility(ctx, id)
+	if err != nil {
+		return Quiz{}, err
+	}
+	v.Visibility = visibility
+	if !canViewQuiz(ctx, authorID, visibility) {
+		return Quiz{}, sql.ErrNoRows
+	}
+	return v, nil
 }
 
-func (s *Service) CreateQuiz(ctx context.Context, title string, authorId int) (Quiz, error) {
-	return s.repo.CreateQuiz(ctx, title, authorId)
+func (s *Service) CreateQuiz(ctx context.Context, title string, authorId int, visibility QuizVisibility) (Quiz, error) {
+	if !visibility.Valid() {
+		return Quiz{}, ErrContentInvalid
+	}
+	return s.repo.CreateQuiz(ctx, title, authorId, visibility)
 }
 
 func (s *Service) ListQuizzes(ctx context.Context) ([]Quiz, error) {
@@ -84,7 +100,14 @@ func (s *Service) ChangeQuestionPosition(ctx context.Context, id, new_position, 
 }
 
 func (s *Service) GetQuestion(ctx context.Context, id int) (Question, error) {
-	return s.repo.GetQuestion(ctx, id)
+	v, err := s.repo.GetQuestion(ctx, id)
+	if err != nil {
+		return v, err
+	}
+	if _, err = s.GetQuiz(ctx, v.QuizId); err != nil {
+		return Question{}, err
+	}
+	return v, nil
 }
 
 // ????????????
@@ -103,7 +126,22 @@ func (s *Service) DeleteAnswerAsAuthor(ctx context.Context, id int, userId int) 
 }
 
 func (s *Service) GetAnswer(ctx context.Context, id int) (Answer, error) {
-	return s.repo.GetAnswer(ctx, id)
+	v, err := s.repo.GetAnswer(ctx, id)
+	if err != nil {
+		return v, err
+	}
+	if _, err = s.GetQuestion(ctx, v.QuestionId); err != nil {
+		return Answer{}, err
+	}
+	return v, nil
+}
+
+func canViewQuiz(ctx context.Context, authorID int, visibility QuizVisibility) bool {
+	if visibility.Public() {
+		return true
+	}
+	userID, ok := middleware.UserIDFromContext(ctx)
+	return ok && userID == authorID
 }
 
 func (s *Service) GetAnswerAsAuthor(ctx context.Context, id, userId int) (Answer, error) {

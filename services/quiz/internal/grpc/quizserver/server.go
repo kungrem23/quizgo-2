@@ -56,12 +56,12 @@ func (s *Server) GetPlayableQuiz(ctx context.Context, request *quizv1.GetPlayabl
 			return nil, status.Error(codes.Internal, "internal error")
 		}
 	}
-	return &quizv1.GetPlayableQuizResponse{Quiz: mapPlayableQuiz(content)}, nil
+	return &quizv1.GetPlayableQuizResponse{Quiz: mapPlayableQuiz(content, principal.UserID)}, nil
 }
 
-func mapPlayableQuiz(content quiz.QuizContent) *quizv1.PlayableQuiz {
+func mapPlayableQuiz(content quiz.QuizContent, hostUserID int) *quizv1.PlayableQuiz {
 	result := &quizv1.PlayableQuiz{
-		Id: int64(content.ID), Revision: content.Revision, Title: content.Title, OwnerUserId: int64(content.AuthorID),
+		Id: int64(content.ID), Revision: content.Revision, Title: content.Title, OwnerUserId: int64(hostUserID),
 		Questions: make([]*quizv1.PlayableQuestion, 0, len(content.Questions)),
 	}
 	for _, question := range content.Questions {

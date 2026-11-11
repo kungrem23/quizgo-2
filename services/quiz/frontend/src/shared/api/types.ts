@@ -2,10 +2,12 @@ export interface User {
   id: number;
   username: string;
 }
+export type QuizVisibility = 'private' | 'public';
 export interface QuizSummary {
   id: number;
   title: string;
   author_id: number;
+  visibility: QuizVisibility;
   question_count: number;
   updated_at: string;
   revision: number;
@@ -28,6 +30,7 @@ export interface QuizContent extends QuizSummary {
 }
 export interface SaveContent {
   title: string;
+  visibility: QuizVisibility;
   revision: number;
   questions: Omit<Question, 'image_url'>[];
 }

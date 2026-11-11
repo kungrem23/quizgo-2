@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware"
 )
 
 var ErrImageStorage = errors.New("image storage unavailable")
@@ -68,7 +69,8 @@ func (s *Service) UploadImage(ctx context.Context, userID int, contentType strin
 }
 
 func (s *Service) ReadImage(ctx context.Context, id string) (UploadedImage, error) {
-	if err := s.repo.ImageExists(ctx, id); err != nil {
+	userID, _ := middleware.UserIDFromContext(ctx)
+	if err := s.repo.ImageAccessible(ctx, id, userID); err != nil {
 		return UploadedImage{}, err
 	}
 	if s.images == nil {

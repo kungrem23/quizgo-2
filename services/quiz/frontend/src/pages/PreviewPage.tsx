@@ -62,11 +62,29 @@ export function PreviewPage() {
               }
               onEdit={(qid) => navigate(`/quizzes/${id}/edit${qid ? `?question=${qid}` : ''}`)}
             >
-              {isAuthor && (
+              {(isAuthor || (user && query.data.visibility === 'public')) && (
                 <HostLaunchCard
                   quizId={id}
                   questionCount={(authorQuery.data || query.data).questions.length}
                 />
+              )}
+              {!user && query.data.visibility === 'public' && (
+                <section className="realtime-launch-card">
+                  <div className="realtime-launch-copy">
+                    <div>
+                      <h2>Хотите провести этот квиз?</h2>
+                      <p>Войдите в аккаунт, чтобы создать игровую комнату.</p>
+                    </div>
+                  </div>
+                  <div className="realtime-launch-actions">
+                    <Link
+                      className="button button-primary"
+                      to={`/login?next=${encodeURIComponent(`/quizzes/${id}`)}`}
+                    >
+                      Войти и запустить
+                    </Link>
+                  </div>
+                </section>
               )}
             </QuizOverview>
           </>

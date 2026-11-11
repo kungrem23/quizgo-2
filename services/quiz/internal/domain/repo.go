@@ -13,11 +13,13 @@ type Repository interface {
 	CreateImageRecord(context.Context, string, int) error
 	ImageExists(context.Context, string) error
 	DeleteUploadedImage(context.Context, string, int, func(context.Context, string) error) error
+	ImageAccessible(context.Context, string, int) error
 	// ========QUIZ======
 	GetQuiz(ctx context.Context, id int) (Quiz, error)
+	GetQuizVisibility(ctx context.Context, id int) (int, QuizVisibility, error)
 	ListQuizzes(ctx context.Context) ([]Quiz, error)
 	ListQuizzesByAuthor(ctx context.Context, authorID int) ([]Quiz, error)
-	CreateQuiz(ctx context.Context, title string, authorId int) (Quiz, error)
+	CreateQuiz(ctx context.Context, title string, authorId int, visibility QuizVisibility) (Quiz, error)
 
 	// =========QUESTION=========
 	CreateNewQuestionAsAuthor(ctx context.Context, textContent string, quizId, authorId int) error

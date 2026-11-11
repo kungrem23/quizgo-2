@@ -353,6 +353,9 @@ svg {
   text-align: center;
   padding-right: 0;
 }
+.create-modal select {
+  width: 100%;
+}
 .modal-emblem {
   position: absolute;
   top: 29px;
@@ -750,6 +753,24 @@ svg {
   color: #73657e;
   position: relative;
   pointer-events: none;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  position: relative;
+  pointer-events: none;
+}
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f1edf8;
+  color: #746487;
+  font-size: 9px;
+  font-weight: 650;
 }
 .card-footer {
   display: flex;
@@ -1277,6 +1298,21 @@ svg {
 .editor-title-wrap {
   min-width: 100px;
   flex: 1;
+}
+.editor-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #766889;
+  margin-left: 5px;
+}
+.editor-visibility select {
+  width: auto;
+  min-height: 32px;
+  padding: 5px 28px 5px 8px;
+  font-size: 10px;
+  border-color: #e5e0ee;
+  background-color: #fff;
 }
 .editor-title-input:not([type='radio']) {
   font-size: 15px;

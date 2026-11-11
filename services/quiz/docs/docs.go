@@ -698,40 +698,13 @@ const docTemplate = `{
             }
         },
         "/quizzes": {
-            "get": {
-                "description": "Возвращает все квизы с вопросами и ответами без признака is_correct. Пагинации нет.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "quizzes"
-                ],
-                "summary": "Получить список квизов",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/quizhandler.QuizResponse"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/respond.ErrorResponse"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Автор определяется по JWT. Тело запроса должно содержать один JSON-объект без неизвестных полей.",
+                "description": "Автор определяется по JWT. visibility: private (по умолчанию) или public. Тело запроса должно содержать один JSON-объект без неизвестных полей.",
                 "consumes": [
                     "application/json"
                 ],
@@ -913,7 +886,7 @@ const docTemplate = `{
         },
         "/quizzes/{id}/content": {
             "get": {
-                "description": "Порядок массивов соответствует порядку вопросов и ответов. is_correct отсутствует. image_url — временная подписанная ссылка S3.",
+                "description": "Порядок массивов соответствует порядку вопросов и ответов. is_correct отсутствует. Публичный квиз доступен всем, приватный — только автору. image_url — временная подписанная ссылка S3.",
                 "produces": [
                     "application/json"
                 ],
@@ -951,7 +924,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Требуется актуальная revision, иначе 409. ID=0 создаёт элемент; отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный. Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120 секунд.",
+                "description": "Требуется актуальная revision, иначе 409. visibility: private или public; отсутствие поля сохраняет текущее значение. ID=0 создаёт элемент; отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный. Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120 секунд.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1007,51 +980,6 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/respond.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/{authorId}/quizzes": {
-            "get": {
-                "description": "Возвращает квизы автора с вопросами и ответами без признака is_correct. Если квизов нет, возвращает пустой массив.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "quizzes"
-                ],
-                "summary": "Получить квизы автора",
-                "parameters": [
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "ID автора",
-                        "name": "authorId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/quizhandler.QuizResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Некорректный ID автора",
-                        "schema": {
-                            "$ref": "#/definitions/respond.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Ошибка сервера",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorResponse"
                         }
@@ -1176,6 +1104,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/quiz.QuizVisibility"
                 }
             }
         },
@@ -1199,8 +1130,22 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/quiz.QuizVisibility"
                 }
             }
+        },
+        "quiz.QuizVisibility": {
+            "type": "string",
+            "enum": [
+                "private",
+                "public"
+            ],
+            "x-enum-varnames": [
+                "QuizPrivate",
+                "QuizPublic"
+            ]
         },
         "quiz.SaveQuizContent": {
             "type": "object",
@@ -1216,6 +1161,9 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/quiz.QuizVisibility"
                 }
             }
         },
@@ -1321,6 +1269,18 @@ const docTemplate = `{
                     "type": "string",
                     "minLength": 1,
                     "example": "География"
+                },
+                "visibility": {
+                    "enum": [
+                        "private",
+                        "public"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/quiz.QuizVisibility"
+                        }
+                    ],
+                    "example": "private"
                 }
             }
         },
@@ -1367,6 +1327,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/quiz.QuizVisibility"
                 }
             }
         },
@@ -1460,6 +1423,17 @@ const docTemplate = `{
                 "title": {
                     "type": "string",
                     "example": "География"
+                },
+                "visibility": {
+                    "enum": [
+                        "private",
+                        "public"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/quiz.QuizVisibility"
+                        }
+                    ]
                 }
             }
         },

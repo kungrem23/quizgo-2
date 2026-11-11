@@ -1,0 +1,13 @@
+
+> quizgo-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.11 /Users/danilmitrosin/Documents/goprojects/quizgo-2/services/quiz/frontend
+
+
+ Test Files  17 passed (17)
+      Tests  68 passed (68)
+   Start at  18:59:09
+   Duration  4.90s (transform 804ms, setup 0ms, import 6.44s, tests 7.46s, environment 20.85s)
+

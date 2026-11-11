@@ -48,13 +48,13 @@ func NewQuizRouterWithReadiness(
 	editor := quizhandler.NewEditorHandler(service)
 	router.Handle("GET /api/me", authenticated(service, editor.Me))
 	router.Handle("GET /api/me/quizzes", authenticated(service, editor.MyQuizzes))
-	router.HandleFunc("GET /api/quizzes/{id}/content", editor.GetContent)
+	router.Handle("GET /api/quizzes/{id}/content", optionallyAuthenticated(service, editor.GetContent))
 	router.Handle("GET /api/quizzes/{id}/author", authenticated(service, editor.GetAuthorContent))
 	router.Handle("PUT /api/quizzes/{id}/content", authenticated(service, editor.SaveContent))
 	router.Handle("DELETE /api/quizzes/{id}", authenticated(service, editor.DeleteQuiz))
 	router.Handle("POST /api/images", authenticated(service, editor.UploadImage))
-	router.HandleFunc("GET /api/images/{id}", editor.ReadImage)
-	router.HandleFunc("GET /api/images/{id}/url", editor.ImageURL)
+	router.Handle("GET /api/images/{id}", optionallyAuthenticated(service, editor.ReadImage))
+	router.Handle("GET /api/images/{id}/url", optionallyAuthenticated(service, editor.ImageURL))
 	router.Handle("DELETE /api/images/{id}", authenticated(service, editor.DeleteImage))
 
 	router.HandleFunc("POST /auth/login", authHandler.Login)
@@ -63,17 +63,17 @@ func NewQuizRouterWithReadiness(
 	router.HandleFunc("POST /auth/logout", authHandler.Logout)
 
 	router.Handle("POST /api/quizzes", authenticated(service, quizHandler.CreateQuiz))
-	router.HandleFunc("GET /api/quizzes", quizHandler.ListQuizzes)
-	router.HandleFunc("GET /api/quizzes/{id}", quizHandler.GetQuiz)
-	router.HandleFunc("GET /api/users/{authorId}/quizzes", quizHandler.ListQuizzesByAuthor)
+	router.HandleFunc("GET /api/quizzes", unavailableCatalog)
+	router.Handle("GET /api/quizzes/{id}", optionallyAuthenticated(service, quizHandler.GetQuiz))
+	router.HandleFunc("GET /api/users/{authorId}/quizzes", unavailableCatalog)
 
 	router.Handle("POST /api/questions", authenticated(service, questionHandler.CreateQuestion))
-	router.HandleFunc("GET /api/questions/{id}", questionHandler.GetQuestion)
+	router.Handle("GET /api/questions/{id}", optionallyAuthenticated(service, questionHandler.GetQuestion))
 	router.Handle("DELETE /api/questions/{id}", authenticated(service, questionHandler.DeleteQuestion))
 	router.Handle("PATCH /api/questions/{id}/position", authenticated(service, questionHandler.ChangeQuestionPosition))
 
 	router.Handle("POST /api/answers", authenticated(service, answerHandler.CreateAnswer))
-	router.HandleFunc("GET /api/answers/{id}", answerHandler.GetAnswer)
+	router.Handle("GET /api/answers/{id}", optionallyAuthenticated(service, answerHandler.GetAnswer))
 	router.Handle("GET /api/answers/{id}/author", authenticated(service, answerHandler.GetAnswerAsAuthor))
 	router.Handle("DELETE /api/answers/{id}", authenticated(service, answerHandler.DeleteAnswer))
 
@@ -84,4 +84,12 @@ func NewQuizRouterWithReadiness(
 
 func authenticated(verifier middleware.AccessTokenVerifier, handler stdhttp.HandlerFunc) stdhttp.Handler {
 	return middleware.Auth(verifier, handler)
+}
+
+func optionallyAuthenticated(verifier middleware.AccessTokenVerifier, handler stdhttp.HandlerFunc) stdhttp.Handler {
+	return middleware.OptionalAuth(verifier, handler)
+}
+
+func unavailableCatalog(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	stdhttp.NotFound(w, r)
 }

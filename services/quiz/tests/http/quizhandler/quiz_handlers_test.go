@@ -17,7 +17,7 @@ import (
 
 type quizServiceStub struct {
 	getQuizFunc             func(ctx context.Context, id int) (quiz.Quiz, error)
-	createQuizFunc          func(ctx context.Context, title string, authorID int) error
+	createQuizFunc          func(ctx context.Context, title string, authorID int, visibility quiz.QuizVisibility) error
 	listQuizzesFunc         func(ctx context.Context) ([]quiz.Quiz, error)
 	listQuizzesByAuthorFunc func(ctx context.Context, authorID int) ([]quiz.Quiz, error)
 }
@@ -26,9 +26,9 @@ func (s quizServiceStub) GetQuiz(ctx context.Context, id int) (quiz.Quiz, error)
 	return s.getQuizFunc(ctx, id)
 }
 
-func (s quizServiceStub) CreateQuiz(ctx context.Context, title string, authorID int) (quiz.Quiz, error) {
-	err := s.createQuizFunc(ctx, title, authorID)
-	return quiz.Quiz{Id: 7, Title: title, AuthorId: authorID, Questions: []*quiz.Question{}}, err
+func (s quizServiceStub) CreateQuiz(ctx context.Context, title string, authorID int, visibility quiz.QuizVisibility) (quiz.Quiz, error) {
+	err := s.createQuizFunc(ctx, title, authorID, visibility)
+	return quiz.Quiz{Id: 7, Title: title, AuthorId: authorID, Visibility: visibility, Questions: []*quiz.Question{}}, err
 }
 
 func (s quizServiceStub) ListQuizzes(ctx context.Context) ([]quiz.Quiz, error) {
@@ -106,10 +106,10 @@ func TestGetQuiz_ServiceErrors(t *testing.T) {
 
 func TestCreateQuiz_Success(t *testing.T) {
 	called := false
-	service := quizServiceStub{createQuizFunc: func(_ context.Context, title string, authorID int) error {
+	service := quizServiceStub{createQuizFunc: func(_ context.Context, title string, authorID int, visibility quiz.QuizVisibility) error {
 		called = true
-		if title != "Geography" || authorID != 42 {
-			t.Errorf("unexpected service args: title=%q authorID=%d", title, authorID)
+		if title != "Geography" || authorID != 42 || visibility != quiz.QuizPrivate {
+			t.Errorf("unexpected service args: title=%q authorID=%d visibility=%q", title, authorID, visibility)
 		}
 		return nil
 	}}
@@ -118,12 +118,27 @@ func TestCreateQuiz_Success(t *testing.T) {
 
 	serveAuthenticated(NewQuizHandler(service).CreateQuiz, recorder, req)
 
-	assertDTOResponse(t, recorder, http.StatusCreated, newQuizResponse(quiz.Quiz{Id: 7, Title: "Geography", AuthorId: 42, Questions: []*quiz.Question{}}))
+	assertDTOResponse(t, recorder, http.StatusCreated, newQuizResponse(quiz.Quiz{Id: 7, Title: "Geography", AuthorId: 42, Visibility: quiz.QuizPrivate, Questions: []*quiz.Question{}}))
 	if recorder.Header().Get("Location") != "/api/quizzes/7" {
 		t.Error("missing resource location")
 	}
 	if !called {
 		t.Error("service was not called")
+	}
+}
+
+func TestCreateQuiz_Public(t *testing.T) {
+	service := quizServiceStub{createQuizFunc: func(_ context.Context, _ string, _ int, visibility quiz.QuizVisibility) error {
+		if visibility != quiz.QuizPublic {
+			t.Fatalf("visibility = %q", visibility)
+		}
+		return nil
+	}}
+	recorder := httptest.NewRecorder()
+	req := authenticatedRequest(t, http.MethodPost, "/quizzes", `{"title":"Shared","visibility":"public"}`)
+	serveAuthenticated(NewQuizHandler(service).CreateQuiz, recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -158,7 +173,7 @@ func TestCreateQuiz_InvalidRequest(t *testing.T) {
 }
 
 func TestCreateQuiz_ServiceError(t *testing.T) {
-	service := quizServiceStub{createQuizFunc: func(context.Context, string, int) error {
+	service := quizServiceStub{createQuizFunc: func(context.Context, string, int, quiz.QuizVisibility) error {
 		return errors.New("database unavailable")
 	}}
 	recorder := httptest.NewRecorder()

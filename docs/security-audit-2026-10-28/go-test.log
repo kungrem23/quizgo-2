@@ -1,0 +1,46 @@
+?   	github.com/kungrem23/quizgo/gen/quiz/v1	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/cmd/game-service	[no test files]
+ok  	github.com/kungrem23/quizgo/services/game/cmd/ws-load	0.608s
+?   	github.com/kungrem23/quizgo/services/game/internal/application	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/client/quizgrpc	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/config	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/domain	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/observability	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/store/redis	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/transport/http	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/transport/ws	[no test files]
+ok  	github.com/kungrem23/quizgo/services/game/tests/application	14.533s
+ok  	github.com/kungrem23/quizgo/services/game/tests/config	1.208s
+ok  	github.com/kungrem23/quizgo/services/game/tests/domain	0.855s
+ok  	github.com/kungrem23/quizgo/services/game/tests/e2e	2.435s
+ok  	github.com/kungrem23/quizgo/services/game/tests/http	1.809s
+ok  	github.com/kungrem23/quizgo/services/game/tests/observability	1.512s
+ok  	github.com/kungrem23/quizgo/services/game/tests/quizgrpc	2.124s
+ok  	github.com/kungrem23/quizgo/services/game/tests/redis	3.763s
+?   	github.com/kungrem23/quizgo/services/game/tests/systemtest	[no test files]
+ok  	github.com/kungrem23/quizgo/services/game/tests/ws	5.726s
+?   	github.com/kungrem23/quizgo/services/quiz/cmd/quiz-service	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/docs	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/authn	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/config	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/domain	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/grpc/quizserver	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/handlers/auth	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/handlers/quiz	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/middleware	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/middleware/respond	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/platform/postgres	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/s3	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/security	[no test files]
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/authn	0.305s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/config	0.478s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/domain	1.336s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/grpc/quizserver	1.076s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http	1.470s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/auth	2.140s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/middleware	2.110s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/quizhandler	2.334s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/postgres	2.385s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/s3	2.557s

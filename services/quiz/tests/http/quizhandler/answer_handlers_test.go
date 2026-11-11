@@ -132,7 +132,7 @@ func newQuestionResponse(value quiz.Question) QuestionResponse {
 }
 
 func newQuizResponse(value quiz.Quiz) QuizResponse {
-	result := QuizResponse{ID: value.Id, Title: value.Title, AuthorID: value.AuthorId}
+	result := QuizResponse{ID: value.Id, Title: value.Title, AuthorID: value.AuthorId, Visibility: value.Visibility}
 	if value.Questions != nil {
 		result.Questions = make([]*QuestionResponse, len(value.Questions))
 		for index, question := range value.Questions {

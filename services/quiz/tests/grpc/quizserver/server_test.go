@@ -108,7 +108,7 @@ func TestUnaryAuthInterceptorRejectsCredentials(t *testing.T) {
 
 func TestGetPlayableQuizMapsSnapshot(t *testing.T) {
 	service := &quizServiceStub{content: quiz.QuizContent{
-		QuizSummary: quiz.QuizSummary{ID: 7, Revision: 3, Title: "Quiz", AuthorID: 42},
+		QuizSummary: quiz.QuizSummary{ID: 7, Revision: 3, Title: "Quiz", AuthorID: 99, Visibility: quiz.QuizPublic},
 		Questions: []quiz.ContentQuestion{{ID: 8, TextContent: "Question", ImageID: "image", TimeLimit: 20,
 			Answers: []quiz.ContentAnswer{{ID: 9, TextContent: "Answer", IsCorrect: true}}}},
 	}}
@@ -117,7 +117,7 @@ func TestGetPlayableQuizMapsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if service.userID != 42 || response.GetQuiz().GetRevision() != 3 || !response.GetQuiz().GetQuestions()[0].GetAnswers()[0].GetIsCorrect() {
+	if service.userID != 42 || response.GetQuiz().GetOwnerUserId() != 42 || response.GetQuiz().GetRevision() != 3 || !response.GetQuiz().GetQuestions()[0].GetAnswers()[0].GetIsCorrect() {
 		t.Fatalf("unexpected response: %#v", response)
 	}
 }

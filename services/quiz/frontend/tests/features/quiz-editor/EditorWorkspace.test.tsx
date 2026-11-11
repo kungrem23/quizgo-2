@@ -13,6 +13,7 @@ vi.mock('../../../src/features/auth/AuthProvider', () => ({
 const fixture = (): QuizContent => ({
   id: 1,
   author_id: 42,
+  visibility: 'private',
   title: 'География',
   revision: 1,
   updated_at: new Date().toISOString(),

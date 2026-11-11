@@ -2,11 +2,25 @@ package quiz
 
 // import "database/sql"
 
+type QuizVisibility string
+
+const (
+	QuizPrivate QuizVisibility = "private"
+	QuizPublic  QuizVisibility = "public"
+)
+
+func (v QuizVisibility) Valid() bool { return v == QuizPrivate || v == QuizPublic }
+
+// Empty visibility is treated as public only for legacy in-memory values. Rows
+// persisted after migration always contain an explicit value.
+func (v QuizVisibility) Public() bool { return v == "" || v == QuizPublic }
+
 type Quiz struct {
-	Id        int
-	Title     string `json:"title"`
-	AuthorId  int    `json:"author_id"`
-	Questions []*Question
+	Id         int
+	Title      string         `json:"title"`
+	AuthorId   int            `json:"author_id"`
+	Visibility QuizVisibility `json:"visibility"`
+	Questions  []*Question
 }
 
 func NewQuiz() *Quiz {

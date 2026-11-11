@@ -12,7 +12,7 @@ import (
 
 	// "github.com/gorilla/mux"
 	// "github.com/golang-jwt/jwt/v5"
-	// "github.com/kungrem23/quizgo/services/quiz/internal/domain"
+	quiz "github.com/kungrem23/quizgo/services/quiz/internal/domain"
 	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware"
 	"github.com/kungrem23/quizgo/services/quiz/internal/http/middleware/respond"
 	// "github.com/kungrem23/quizgo/services/quiz/internal/security"
@@ -67,13 +67,14 @@ func (h *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
 
 type CreateQuizRequest struct {
 	// Название не должно быть пустым после удаления пробелов по краям.
-	Title string `json:"title" validate:"required" minLength:"1" example:"География"`
+	Title      string              `json:"title" validate:"required" minLength:"1" example:"География"`
+	Visibility quiz.QuizVisibility `json:"visibility,omitempty" enums:"private,public" example:"private"`
 }
 
 // CreateQuiz creates a quiz owned by the authenticated user.
 //
 // @Summary Создать квиз
-// @Description Автор определяется по JWT. Тело запроса должно содержать один JSON-объект без неизвестных полей.
+// @Description Автор определяется по JWT. visibility: private (по умолчанию) или public. Тело запроса должно содержать один JSON-объект без неизвестных полей.
 // @Tags quizzes
 // @Accept json
 // @Produce json
@@ -111,7 +112,14 @@ func (h *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{Error: "title too long"})
 		return
 	}
-	created, err := h.service.CreateQuiz(r.Context(), req.Title, authorId)
+	if req.Visibility == "" {
+		req.Visibility = quiz.QuizPrivate
+	}
+	if !req.Visibility.Valid() {
+		respond.WriteJSON(w, http.StatusBadRequest, respond.ErrorResponse{Error: "invalid visibility"})
+		return
+	}
+	created, err := h.service.CreateQuiz(r.Context(), req.Title, authorId, req.Visibility)
 	if err != nil {
 		respond.WriteJSON(w, http.StatusInternalServerError, respond.ErrorResponse{
 			Error: "server error",
@@ -130,7 +138,6 @@ func (h *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {array} QuizResponse
 // @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
-// @Router /quizzes [get]
 func (h *QuizHandler) ListQuizzes(w http.ResponseWriter, r *http.Request) {
 	quizzes, err := h.service.ListQuizzes(r.Context())
 	if err != nil {
@@ -152,7 +159,6 @@ func (h *QuizHandler) ListQuizzes(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {array} QuizResponse
 // @Failure 400 {object} respond.ErrorResponse "Некорректный ID автора"
 // @Failure 500 {object} respond.ErrorResponse "Ошибка сервера"
-// @Router /users/{authorId}/quizzes [get]
 func (h *QuizHandler) ListQuizzesByAuthor(w http.ResponseWriter, r *http.Request) {
 	authorIdStr := r.PathValue("authorId")
 	authorId, err := strconv.Atoi(authorIdStr)

@@ -15,9 +15,9 @@ import (
 // 	return &QuizRepo{db: db}
 // }
 
-func (r *PostgresRepository) CreateQuiz(ctx context.Context, title string, userId int) (Quiz, error) {
-	q := Quiz{Questions: []*Question{}}
-	err := r.db.QueryRowContext(ctx, `INSERT INTO quizzes (title, author_id) VALUES ($1, $2) RETURNING id, title, author_id`, title, userId).Scan(&q.Id, &q.Title, &q.AuthorId)
+func (r *PostgresRepository) CreateQuiz(ctx context.Context, title string, userId int, visibility QuizVisibility) (Quiz, error) {
+	q := Quiz{Questions: []*Question{}, Visibility: visibility}
+	err := r.db.QueryRowContext(ctx, `INSERT INTO quizzes (title, author_id, visibility) VALUES ($1, $2, $3) RETURNING id, title, author_id, visibility`, title, userId, visibility).Scan(&q.Id, &q.Title, &q.AuthorId, &q.Visibility)
 	return q, err
 }
 
@@ -90,6 +90,13 @@ func (r *PostgresRepository) GetQuiz(ctx context.Context, id int) (Quiz, error) 
 	}
 	q.Questions = questions
 	return q, nil
+}
+
+func (r *PostgresRepository) GetQuizVisibility(ctx context.Context, id int) (int, QuizVisibility, error) {
+	var authorID int
+	var visibility QuizVisibility
+	err := r.db.QueryRowContext(ctx, `SELECT author_id, visibility FROM quizzes WHERE id=$1`, id).Scan(&authorID, &visibility)
+	return authorID, visibility, err
 }
 
 func (r *PostgresRepository) ListQuizzes(ctx context.Context) ([]Quiz, error) {

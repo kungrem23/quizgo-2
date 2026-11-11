@@ -20,7 +20,7 @@ func (r playableRepoStub) GetQuizContent(context.Context, int) (QuizContent, err
 
 func validPlayableQuiz() QuizContent {
 	return QuizContent{
-		QuizSummary: QuizSummary{ID: 7, Title: "Geography", AuthorID: 42, Revision: 3},
+		QuizSummary: QuizSummary{ID: 7, Title: "Geography", AuthorID: 42, Visibility: QuizPrivate, Revision: 3},
 		Questions: []ContentQuestion{{
 			ID: 11, TextContent: "Capital?", ImageID: "image-1", ImageURL: "https://signed.example", TimeLimit: 20,
 			Answers: []ContentAnswer{{ID: 21, TextContent: "Paris", IsCorrect: true}, {ID: 22, TextContent: "Rome"}},
@@ -46,11 +46,27 @@ func TestGetPlayableQuizRejectsDifferentOwner(t *testing.T) {
 	}
 }
 
+func TestGetPlayableQuizAllowsPublicQuizForDifferentHost(t *testing.T) {
+	content := validPlayableQuiz()
+	content.Visibility = QuizPublic
+	service := NewService(playableRepoStub{content: content})
+	if _, err := service.GetPlayableQuiz(context.Background(), 7, 41); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestGetPlayableQuizRejectsEmptyQuiz(t *testing.T) {
 	content := validPlayableQuiz()
 	content.Questions = nil
 	service := NewService(playableRepoStub{content: content})
 	if _, err := service.GetPlayableQuiz(context.Background(), 7, 42); !errors.Is(err, ErrQuizNotPlayable) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestSaveQuizContentRejectsInvalidVisibility(t *testing.T) {
+	input := SaveQuizContent{Title: "Quiz", Visibility: "shared", Revision: 1, Questions: []ContentQuestion{}}
+	if err := input.Validate(); !errors.Is(err, ErrContentInvalid) {
 		t.Fatalf("error = %v", err)
 	}
 }

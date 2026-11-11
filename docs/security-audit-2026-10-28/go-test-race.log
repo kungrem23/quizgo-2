@@ -1,0 +1,55 @@
+?   	github.com/kungrem23/quizgo/services/game/cmd/game-service	[no test files]
+# github.com/kungrem23/quizgo/services/game/tests/http.test
+ld: warning: '/private/var/folders/x0/b_bl2rw960zdgn1tny5y68340000gn/T/go-link-166908077/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/kungrem23/quizgo/services/game/tests/application.test
+ld: warning: '/private/var/folders/x0/b_bl2rw960zdgn1tny5y68340000gn/T/go-link-1283270304/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+ok  	github.com/kungrem23/quizgo/services/game/cmd/ws-load	1.317s
+?   	github.com/kungrem23/quizgo/services/game/internal/application	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/client/quizgrpc	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/config	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/domain	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/observability	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/store/redis	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/transport/http	[no test files]
+?   	github.com/kungrem23/quizgo/services/game/internal/transport/ws	[no test files]
+# github.com/kungrem23/quizgo/services/game/tests/observability.test
+ld: warning: '/private/var/folders/x0/b_bl2rw960zdgn1tny5y68340000gn/T/go-link-2038124665/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/kungrem23/quizgo/services/game/tests/redis.test
+ld: warning: '/private/var/folders/x0/b_bl2rw960zdgn1tny5y68340000gn/T/go-link-2055656224/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/kungrem23/quizgo/services/game/tests/ws.test
+ld: warning: '/private/var/folders/x0/b_bl2rw960zdgn1tny5y68340000gn/T/go-link-2783066735/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+ok  	github.com/kungrem23/quizgo/services/game/tests/application	15.431s
+ok  	github.com/kungrem23/quizgo/services/game/tests/config	2.366s
+ok  	github.com/kungrem23/quizgo/services/game/tests/domain	2.759s
+ok  	github.com/kungrem23/quizgo/services/game/tests/e2e	1.735s
+ok  	github.com/kungrem23/quizgo/services/game/tests/http	2.081s
+ok  	github.com/kungrem23/quizgo/services/game/tests/observability	1.954s
+ok  	github.com/kungrem23/quizgo/services/game/tests/quizgrpc	1.525s
+ok  	github.com/kungrem23/quizgo/services/game/tests/redis	2.388s
+?   	github.com/kungrem23/quizgo/services/game/tests/systemtest	[no test files]
+ok  	github.com/kungrem23/quizgo/services/game/tests/ws	4.435s
+?   	github.com/kungrem23/quizgo/services/quiz/cmd/quiz-service	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/docs	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/authn	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/config	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/domain	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/grpc/quizserver	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/handlers/auth	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/handlers/quiz	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/middleware	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/http/middleware/respond	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/platform/postgres	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/s3	[no test files]
+?   	github.com/kungrem23/quizgo/services/quiz/internal/security	[no test files]
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/authn	1.314s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/config	1.531s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/domain	8.157s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/grpc/quizserver	1.987s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http	2.748s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/auth	6.278s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/middleware	3.673s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/quizhandler	2.282s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/postgres	3.348s
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/s3	2.838s

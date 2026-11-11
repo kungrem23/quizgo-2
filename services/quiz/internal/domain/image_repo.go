@@ -15,6 +15,20 @@ func (r *PostgresRepository) ImageExists(ctx context.Context, id string) error {
 	return r.db.QueryRowContext(ctx, `SELECT id FROM images WHERE id=$1`, id).Scan(&found)
 }
 
+func (r *PostgresRepository) ImageAccessible(ctx context.Context, id string, userID int) error {
+	var found string
+	return r.db.QueryRowContext(ctx, `
+		SELECT i.id
+		FROM images i
+		WHERE i.id=$1 AND (
+			i.author_id=$2 OR EXISTS (
+				SELECT 1 FROM questions q
+				JOIN quizzes z ON z.id=q.quiz_id
+				WHERE q.image_id=i.id AND z.visibility='public'
+			)
+		)`, id, userID).Scan(&found)
+}
+
 // Keep the row locked while removing the object, preventing a concurrent save
 // from attaching it. A failed storage deletion leaves metadata available to retry.
 func (r *PostgresRepository) DeleteUploadedImage(ctx context.Context, id string, userID int, remove func(context.Context, string) error) error {

@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Clock3,
   Copy,
+  Globe2,
+  Lock,
   Pencil,
   Share2,
   Sparkles,
@@ -70,6 +72,9 @@ export function QuizOverview({
         <p>
           {pluralQuestions(questions.length)}
           <span>·</span>автор {authorName}
+          <span>·</span>
+          {quiz.visibility === 'public' ? <Globe2 size={13} /> : <Lock size={13} />}
+          {quiz.visibility === 'public' ? 'публичный' : 'приватный'}
         </p>
         <div className="hero-actions">
           {isAuthor && (
@@ -78,7 +83,7 @@ export function QuizOverview({
               Редактировать
             </Button>
           )}
-          {!draft && (
+          {!draft && quiz.visibility === 'public' && (
             <Button variant="secondary" onClick={() => void share()}>
               <Share2 size={17} />
               Поделиться

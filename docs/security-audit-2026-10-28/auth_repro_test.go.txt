@@ -1,0 +1,32 @@
+package auth_test
+import (
+ "context"
+ "net/http"
+ "net/http/httptest"
+ "os"
+ "regexp"
+ "strings"
+ "testing"
+ "github.com/kungrem23/quizgo/services/quiz/internal/domain"
+ "github.com/kungrem23/quizgo/services/quiz/internal/security"
+)
+func TestAuditCrossSitePlainTextLogin(t *testing.T) {
+ hash,err:=security.HashPassword("=audit-pass-123"); if err!=nil {t.Fatal(err)}
+ handler:=newAuthHandler(t, authRepoStub{getUser:func(context.Context,string)(quiz.User,error){return quiz.User{Id:42,Username:"attacker",PasswordHash:hash},nil}})
+ // A text/plain HTML form joins name + '=' + value and appends CRLF.
+ body := `{"username":"attacker","password":"=audit-pass-123"}`+"\r\n"
+ req:=httptest.NewRequest(http.MethodPost,"https://quiz.example/auth/login",strings.NewReader(body))
+ req.Header.Set("Origin","https://attacker.example")
+ req.Header.Set("Content-Type","text/plain")
+ req.Header.Set("Sec-Fetch-Site","cross-site")
+ req.Header.Set("Sec-Fetch-Mode","navigate")
+ rec:=httptest.NewRecorder(); handler.Login(rec,req)
+ if rec.Code!=200 || len(rec.Result().Cookies())!=1 {t.Fatalf("status=%d cookie_count=%d",rec.Code,len(rec.Result().Cookies()))}
+ t.Log("CONFIRMED: cross-site form login accepted; refresh cookie issued")
+}
+func TestAuditSeedPassword(t *testing.T) {
+ b,err:=os.ReadFile("../../../internal/platform/postgres/migrations/0004_seed_quiz.sql");if err!=nil {t.Fatal(err)}
+ hash:=regexp.MustCompile(`\$2a\$10\$[a-zA-Z0-9./]+`).FindString(string(b)); if hash=="" {t.Fatal("seed hash missing")}
+ if !security.CheckPasswordHash("password",hash) { t.Fatal("seed no longer matches the audited default password") }
+ t.Log("CONFIRMED: production seed uses the publicly guessable username/password pair")
+}

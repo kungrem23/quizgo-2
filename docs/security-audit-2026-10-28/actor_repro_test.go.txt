@@ -1,0 +1,20 @@
+package application
+import (
+ "context"
+ "errors"
+ "testing"
+ "time"
+ game "github.com/kungrem23/quizgo/services/game/internal/domain"
+)
+type auditReadRepo struct{value game.Game}
+func (r *auditReadRepo) Save(context.Context,game.Game,time.Duration)error{return nil}
+func (r *auditReadRepo) Update(context.Context,game.Game,time.Duration)error{return nil}
+func (r *auditReadRepo) GetByID(context.Context,string)(game.Game,error){return r.value,nil}
+func (r *auditReadRepo) GetByCode(context.Context,string)(game.Game,error){return r.value,nil}
+func TestAuditInvalidHostAuthenticationRetainsActor(t *testing.T){
+ h:=NewHub(&auditReadRepo{value:game.Game{ID:"known-game",Phase:game.PhaseLobby,HostTicketHash:"unmatchable"}},time.Hour);defer h.Close()
+ _,err:=h.AuthenticateHost(context.Background(),"known-game","wrong-ticket");if !errors.Is(err,game.ErrUnauthorized){t.Fatal(err)}
+ h.mu.Lock();count:=len(h.rooms);h.mu.Unlock()
+ if count!=1{t.Fatalf("retained actor count=%d",count)}
+ t.Log("CONFIRMED: rejected authentication starts and retains a room actor")
+}

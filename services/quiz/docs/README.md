@@ -1,6 +1,6 @@
 # Swagger для CRUD API
 
-Документация описывает 22 реализованные HTTP-операции из
+Документация описывает 21 зарегистрированную HTTP-операцию из
 `services/quiz/internal/http/handlers/quiz`, работающих с `services/quiz/internal/domain`.
 Схемы ответов строятся по HTTP DTO: публичные ответы не содержат `is_correct`,
 профили пользователей не содержат хеш пароля. Внутренний API realtime-сервиса
@@ -60,11 +60,12 @@ Swagger охватывает зарегистрированные CRUD-марш�
 
 ## API редактора
 
-- `POST /api/quizzes` теперь возвращает созданный `QuizResponse` с ID и заголовок
-  `Location`, а не пустое тело. Форма запроса не изменилась.
+- `POST /api/quizzes` возвращает созданный `QuizResponse` с ID и заголовок
+  `Location`. `visibility` принимает `private` (по умолчанию) или `public`.
 - `GET /api/me`: проверенный текущий пользователь.
 - `GET /api/me/quizzes`: компактный список с `question_count`, `updated_at`, `revision`.
-- `GET /api/quizzes/{id}/content`: публичное содержимое с временем и порядком ответов.
+- `GET /api/quizzes/{id}/content`: содержимое с временем и порядком ответов;
+  публичный квиз доступен по ссылке, приватный — только автору.
 - `GET /api/quizzes/{id}/author`: авторское содержимое с `is_correct`, `Cache-Control: no-store`.
 - `PUT /api/quizzes/{id}/content`: транзакционное сохранение всей структуры.
 - `DELETE /api/quizzes/{id}`: удаление квиза с вопросами и ответами.
@@ -73,6 +74,10 @@ Swagger охватывает зарегистрированные CRUD-марш�
 - `GET /api/images/{id}`: `307` на подписанную S3-ссылку, `Cache-Control: no-store`.
 - `GET /api/images/{id}/url`: `{id, url}` со свежей подписанной ссылкой, `Cache-Control: no-store`.
 - `DELETE /api/images/{id}`: удаление своей неиспользуемой загрузки; `409`, если привязана.
+
+Публичного каталога пока нет: `/api/quizzes` и
+`/api/users/{authorId}/quizzes` не публикуют списки. Автор видит все свои квизы
+через `GET /api/me/quizzes`.
 
 Сохранение принимает `title`, `revision`, `questions`. Порядок массивов задаёт
 порядок вопросов и ответов. Существующие ID сохраняются, `id: 0` создаёт элемент,

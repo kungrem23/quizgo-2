@@ -15,7 +15,7 @@ type contentDB interface {
 
 func readContent(ctx context.Context, db contentDB, id int) (QuizContent, error) {
 	v := QuizContent{Questions: []ContentQuestion{}}
-	err := db.QueryRowContext(ctx, `SELECT id, title, author_id, updated_at, revision FROM quizzes WHERE id=$1`, id).Scan(&v.ID, &v.Title, &v.AuthorID, &v.UpdatedAt, &v.Revision)
+	err := db.QueryRowContext(ctx, `SELECT id, title, author_id, visibility, updated_at, revision FROM quizzes WHERE id=$1`, id).Scan(&v.ID, &v.Title, &v.AuthorID, &v.Visibility, &v.UpdatedAt, &v.Revision)
 	if err != nil {
 		return v, err
 	}
@@ -73,7 +73,7 @@ func (r *PostgresRepository) GetQuizContent(ctx context.Context, id int) (QuizCo
 }
 
 func (r *PostgresRepository) ListQuizSummaries(ctx context.Context, userID int) ([]QuizSummary, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT q.id, q.title, q.author_id, q.updated_at, q.revision, COUNT(questions.id) FROM quizzes q LEFT JOIN questions ON questions.quiz_id=q.id WHERE q.author_id=$1 GROUP BY q.id ORDER BY q.updated_at DESC, q.id DESC`, userID)
+	rows, err := r.db.QueryContext(ctx, `SELECT q.id, q.title, q.author_id, q.visibility, q.updated_at, q.revision, COUNT(questions.id) FROM quizzes q LEFT JOIN questions ON questions.quiz_id=q.id WHERE q.author_id=$1 GROUP BY q.id ORDER BY q.updated_at DESC, q.id DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (r *PostgresRepository) ListQuizSummaries(ctx context.Context, userID int) 
 	values := []QuizSummary{}
 	for rows.Next() {
 		var v QuizSummary
-		if err := rows.Scan(&v.ID, &v.Title, &v.AuthorID, &v.UpdatedAt, &v.Revision, &v.QuestionCount); err != nil {
+		if err := rows.Scan(&v.ID, &v.Title, &v.AuthorID, &v.Visibility, &v.UpdatedAt, &v.Revision, &v.QuestionCount); err != nil {
 			return nil, err
 		}
 		values = append(values, v)
@@ -129,7 +129,7 @@ func (r *PostgresRepository) SaveQuizContent(ctx context.Context, id, userID int
 	if revision != input.Revision {
 		return QuizContent{}, ErrContentConflict
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE quizzes SET title=$1, updated_at=clock_timestamp(), revision=revision+1 WHERE id=$2`, input.Title, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE quizzes SET title=$1, visibility=COALESCE(NULLIF($2,''), visibility), updated_at=clock_timestamp(), revision=revision+1 WHERE id=$3`, input.Title, input.Visibility, id); err != nil {
 		return QuizContent{}, err
 	}
 	retained := []int{}

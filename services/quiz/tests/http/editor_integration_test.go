@@ -116,13 +116,15 @@ func TestEditorPostgresLifecycle(t *testing.T) {
 		return v
 	}
 	empty := read()
-	if empty.Revision < 1 || empty.Questions == nil || len(empty.Questions) != 0 {
+	if empty.Revision < 1 || empty.Visibility != quiz.QuizPrivate || empty.Questions == nil || len(empty.Questions) != 0 {
 		t.Fatalf("invalid empty content: %+v", empty)
 	}
+	call("GET", path+"/content", "", nil, 404)
+	call("GET", path+"/content", other, nil, 404)
 	question := func(text string) quiz.ContentQuestion {
 		return quiz.ContentQuestion{TextContent: text, TimeLimit: 20, Answers: []quiz.ContentAnswer{{TextContent: "Париж", IsCorrect: true}, {TextContent: "Лондон"}}}
 	}
-	input := quiz.SaveQuizContent{Title: empty.Title, Revision: empty.Revision, Questions: []quiz.ContentQuestion{question("Столица Франции?"), question("Другой вопрос")}}
+	input := quiz.SaveQuizContent{Title: empty.Title, Visibility: quiz.QuizPublic, Revision: empty.Revision, Questions: []quiz.ContentQuestion{question("Столица Франции?"), question("Другой вопрос")}}
 	call("PUT", path+"/content", other, input, 403)
 	call("PUT", path+"/content", owner, input, 200)
 	saved := read()
@@ -241,6 +243,16 @@ func TestEditorPostgresLifecycle(t *testing.T) {
 	if public.Questions[0].ImageURL != img.URL {
 		t.Fatal("public response lacks S3 link")
 	}
+	// Making the quiz private closes both content and fresh image-link access.
+	saved = read()
+	privateInput := quiz.SaveQuizContent{Title: saved.Title, Visibility: quiz.QuizPrivate, Revision: saved.Revision, Questions: saved.Questions}
+	call("PUT", path+"/content", owner, privateInput, 200)
+	call("GET", path+"/content", "", nil, 404)
+	call("GET", "/api/images/"+img.ID+"/url", "", nil, 404)
+	call("GET", "/api/images/"+img.ID+"/url", owner, nil, 200)
+	saved = read()
+	publicInput := quiz.SaveQuizContent{Title: saved.Title, Visibility: quiz.QuizPublic, Revision: saved.Revision, Questions: saved.Questions}
+	call("PUT", path+"/content", owner, publicInput, 200)
 	var binaryColumns int
 	if err := db.QueryRow(`SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='images' AND column_name IN ('content', 'content_type', 'image_url')`).Scan(&binaryColumns); err != nil || binaryColumns != 0 {
 		t.Fatalf("legacy columns remain: %d, %v", binaryColumns, err)

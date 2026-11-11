@@ -126,7 +126,7 @@ func (h *EditorHandler) MyQuizzes(w http.ResponseWriter, r *http.Request) {
 
 // GetContent returns saved public content.
 // @Summary Содержимое квиза для просмотра
-// @Description Порядок массивов соответствует порядку вопросов и ответов. is_correct отсутствует. image_url — временная подписанная ссылка S3.
+// @Description Порядок массивов соответствует порядку вопросов и ответов. is_correct отсутствует. Публичный квиз доступен всем, приватный — только автору. image_url — временная подписанная ссылка S3.
 // @Tags quizzes
 // @Produce json
 // @Param id path int true "ID квиза"
@@ -178,7 +178,7 @@ func (h *EditorHandler) GetAuthorContent(w http.ResponseWriter, r *http.Request)
 
 // SaveContent atomically updates all content while retaining existing IDs.
 // @Summary Сохранить квиз целиком
-// @Description Требуется актуальная revision, иначе 409. ID=0 создаёт элемент; отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный. Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120 секунд.
+// @Description Требуется актуальная revision, иначе 409. visibility: private или public; отсутствие поля сохраняет текущее значение. ID=0 создаёт элемент; отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный. Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120 секунд.
 // @Tags quizzes
 // @Accept json
 // @Produce json

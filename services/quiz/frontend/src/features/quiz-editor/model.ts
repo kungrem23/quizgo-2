@@ -1,4 +1,4 @@
-import type { Question, QuizContent, SaveContent } from '../../shared/api/types';
+import type { Question, QuizContent, QuizVisibility, SaveContent } from '../../shared/api/types';
 export interface DraftAnswer {
   id: number;
   key: string;
@@ -11,6 +11,7 @@ export interface DraftQuestion extends Omit<Question, 'answers'> {
 }
 export interface Draft {
   title: string;
+  visibility: QuizVisibility;
   revision: number;
   questions: DraftQuestion[];
 }
@@ -36,6 +37,7 @@ export function newQuestion(): DraftQuestion {
 export function toDraft(value: QuizContent): Draft {
   return {
     title: value.title,
+    visibility: value.visibility,
     revision: value.revision,
     questions: (value.questions || []).map((q) => ({
       ...q,
@@ -51,6 +53,7 @@ export function toDraft(value: QuizContent): Draft {
 export function payload(v: Draft): SaveContent {
   return {
     title: v.title.trim(),
+    visibility: v.visibility,
     revision: v.revision,
     questions: v.questions.map((q) => ({
       id: q.id,
@@ -90,6 +93,7 @@ export function validateDraft(v: Draft): { message: string; questionKey?: string
 }
 export type Action =
   | { type: 'title'; value: string }
+  | { type: 'visibility'; value: QuizVisibility }
   | { type: 'replace'; value: Draft }
   | { type: 'add'; question: DraftQuestion }
   | { type: 'remove'; key: string }
@@ -99,6 +103,8 @@ export function reducer(state: Draft, action: Action): Draft {
   switch (action.type) {
     case 'title':
       return { ...state, title: action.value };
+    case 'visibility':
+      return { ...state, visibility: action.value };
     case 'replace':
       return action.value;
     case 'add':
@@ -125,12 +131,18 @@ export function reducer(state: Draft, action: Action): Draft {
 export function draftStorageKey(user: number, quiz: number) {
   return `quizgo:draft:${user}:${quiz}`;
 }
-export function readDraft(key: string): Draft | null {
+export function readDraft(
+  key: string,
+  fallbackVisibility: QuizVisibility = 'private',
+): Draft | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(key) || 'null');
     if (
       !value ||
       typeof value.title !== 'string' ||
+      (value.visibility !== undefined &&
+        value.visibility !== 'private' &&
+        value.visibility !== 'public') ||
       typeof value.revision !== 'number' ||
       !Array.isArray(value.questions) ||
       value.questions.some(
@@ -142,7 +154,7 @@ export function readDraft(key: string): Draft | null {
       )
     )
       return null;
-    return value;
+    return { ...value, visibility: value.visibility || fallbackVisibility };
   } catch {
     return null;
   }

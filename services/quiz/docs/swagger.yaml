@@ -45,6 +45,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      visibility:
+        $ref: '#/definitions/quiz.QuizVisibility'
     type: object
   quiz.QuizSummary:
     properties:
@@ -60,7 +62,17 @@ definitions:
         type: string
       updated_at:
         type: string
+      visibility:
+        $ref: '#/definitions/quiz.QuizVisibility'
     type: object
+  quiz.QuizVisibility:
+    enum:
+    - private
+    - public
+    type: string
+    x-enum-varnames:
+    - QuizPrivate
+    - QuizPublic
   quiz.SaveQuizContent:
     properties:
       questions:
@@ -71,6 +83,8 @@ definitions:
         type: integer
       title:
         type: string
+      visibility:
+        $ref: '#/definitions/quiz.QuizVisibility'
     type: object
   quiz.UploadedImage:
     properties:
@@ -146,6 +160,13 @@ definitions:
         example: География
         minLength: 1
         type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/quiz.QuizVisibility'
+        enum:
+        - private
+        - public
+        example: private
     required:
     - title
     type: object
@@ -179,6 +200,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      visibility:
+        $ref: '#/definitions/quiz.QuizVisibility'
     type: object
   quizhandler.PublicContentAnswer:
     properties:
@@ -243,6 +266,12 @@ definitions:
       title:
         example: География
         type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/quiz.QuizVisibility'
+        enum:
+        - private
+        - public
     type: object
   quizhandler.UserResponse:
     properties:
@@ -723,30 +752,12 @@ paths:
       tags:
       - questions
   /quizzes:
-    get:
-      description: Возвращает все квизы с вопросами и ответами без признака is_correct.
-        Пагинации нет.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/quizhandler.QuizResponse'
-            type: array
-        "500":
-          description: Ошибка сервера
-          schema:
-            $ref: '#/definitions/respond.ErrorResponse'
-      summary: Получить список квизов
-      tags:
-      - quizzes
     post:
       consumes:
       - application/json
-      description: Автор определяется по JWT. Тело запроса должно содержать один JSON-объект
-        без неизвестных полей.
+      description: 'Автор определяется по JWT. visibility: private (по умолчанию)
+        или public. Тело запроса должно содержать один JSON-объект без неизвестных
+        полей.'
       parameters:
       - description: Новый квиз
         in: body
@@ -864,7 +875,8 @@ paths:
   /quizzes/{id}/content:
     get:
       description: Порядок массивов соответствует порядку вопросов и ответов. is_correct
-        отсутствует. image_url — временная подписанная ссылка S3.
+        отсутствует. Публичный квиз доступен всем, приватный — только автору. image_url
+        — временная подписанная ссылка S3.
       parameters:
       - description: ID квиза
         in: path
@@ -888,7 +900,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: 'Требуется актуальная revision, иначе 409. ID=0 создаёт элемент;
+      description: 'Требуется актуальная revision, иначе 409. visibility: private
+        или public; отсутствие поля сохраняет текущее значение. ID=0 создаёт элемент;
         отсутствующие в массивах элементы удаляются. Порядок задаётся массивами. Пустой
         квиз допустим. До 100 вопросов, в каждом 2–8 ответов и ровно один правильный.
         Название до 50 символов, тексты до 200. time_limit: 5,10,15,20,30,45,60,90,120
@@ -931,37 +944,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Сохранить квиз целиком
-      tags:
-      - quizzes
-  /users/{authorId}/quizzes:
-    get:
-      description: Возвращает квизы автора с вопросами и ответами без признака is_correct.
-        Если квизов нет, возвращает пустой массив.
-      parameters:
-      - description: ID автора
-        in: path
-        minimum: 1
-        name: authorId
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/quizhandler.QuizResponse'
-            type: array
-        "400":
-          description: Некорректный ID автора
-          schema:
-            $ref: '#/definitions/respond.ErrorResponse'
-        "500":
-          description: Ошибка сервера
-          schema:
-            $ref: '#/definitions/respond.ErrorResponse'
-      summary: Получить квизы автора
       tags:
       - quizzes
   /users/{id}:

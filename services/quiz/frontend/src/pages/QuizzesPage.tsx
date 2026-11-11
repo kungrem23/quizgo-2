@@ -12,6 +12,8 @@ import {
   Trash2,
   Eye,
   Sparkles,
+  Globe2,
+  Lock,
   X,
 } from 'lucide-react';
 import { api, errorMessage, keys } from '../shared/api/client';
@@ -212,7 +214,13 @@ export function QuizzesPage() {
                   <Link className="card-title" to={`/quizzes/${q.id}`}>
                     {q.title}
                   </Link>
-                  <span className="card-count">{pluralQuestions(q.question_count)}</span>
+                  <div className="card-meta">
+                    <span className="card-count">{pluralQuestions(q.question_count)}</span>
+                    <span className="visibility-badge">
+                      {q.visibility === 'public' ? <Globe2 size={12} /> : <Lock size={12} />}
+                      {q.visibility === 'public' ? 'Публичный' : 'Приватный'}
+                    </span>
+                  </div>
                   <div className="card-footer">
                     <span>Обновлён {relativeDate(q.updated_at)}</span>
                     <ArrowUpRight size={17} />

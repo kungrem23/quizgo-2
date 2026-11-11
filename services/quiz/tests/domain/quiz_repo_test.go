@@ -22,11 +22,14 @@ func TestCreateQuiz_Success(t *testing.T) {
 		title  = "qwerty"
 		userId = 5
 	)
-	query := regexp.QuoteMeta(`INSERT INTO quizzes (title, author_id) VALUES ($1, $2) RETURNING id, title, author_id`)
-	mock.ExpectQuery(query).WithArgs(title, userId).WillReturnRows(sqlmock.NewRows([]string{"id", "title", "author_id"}).AddRow(17, title, userId))
-	created, err := repo.CreateQuiz(context.Background(), title, userId)
+	query := regexp.QuoteMeta(`INSERT INTO quizzes (title, author_id, visibility) VALUES ($1, $2, $3) RETURNING id, title, author_id, visibility`)
+	mock.ExpectQuery(query).WithArgs(title, userId, QuizPrivate).WillReturnRows(sqlmock.NewRows([]string{"id", "title", "author_id", "visibility"}).AddRow(17, title, userId, QuizPrivate))
+	created, err := repo.CreateQuiz(context.Background(), title, userId, QuizPrivate)
 	if created.Id != 17 {
 		t.Fatalf("created ID = %d", created.Id)
+	}
+	if created.Visibility != QuizPrivate {
+		t.Fatalf("created visibility = %q", created.Visibility)
 	}
 	if err != nil {
 		t.Fatalf(" error got: %v | expect: %v", err, nil)

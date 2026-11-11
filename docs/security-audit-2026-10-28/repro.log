@@ -1,0 +1,18 @@
+=== RUN   TestAuditInvalidHostAuthenticationRetainsActor
+    security_audit_repro_test.go:19: CONFIRMED: rejected authentication starts and retains a room actor
+--- PASS: TestAuditInvalidHostAuthenticationRetainsActor (0.00s)
+PASS
+ok  	github.com/kungrem23/quizgo/services/game/internal/application	0.815s
+=== RUN   TestAuditCrossSitePlainTextLogin
+    security_audit_repro_test.go:25: CONFIRMED: cross-site form login accepted; refresh cookie issued
+--- PASS: TestAuditCrossSitePlainTextLogin (0.12s)
+=== RUN   TestAuditSeedPassword
+    security_audit_repro_test.go:31: CONFIRMED: production seed uses the publicly guessable username/password pair
+--- PASS: TestAuditSeedPassword (0.05s)
+PASS
+ok  	github.com/kungrem23/quizgo/services/quiz/tests/http/auth	0.746s
+=== RUN   TestAuditDisconnectedPlayersExhaustLobby
+    security_audit_repro_test.go:24: CONFIRMED: 100 sequential joins/disconnects fill the lobby; legitimate player rejected
+--- PASS: TestAuditDisconnectedPlayersExhaustLobby (0.00s)
+PASS
+ok  	github.com/kungrem23/quizgo/services/game/tests/application	1.104s

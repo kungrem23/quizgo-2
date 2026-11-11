@@ -5,6 +5,7 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { api, errorMessage, keys } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Button, ErrorBox, Modal } from '../../shared/ui/ui';
+import type { QuizVisibility } from '../../shared/api/types';
 export function CreateQuizDialog({
   open,
   onOpenChange,
@@ -13,21 +14,25 @@ export function CreateQuizDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [title, setTitle] = useState('');
+  const [visibility, setVisibility] = useState<QuizVisibility>('private');
   const navigate = useNavigate();
   const client = useQueryClient();
   const { user } = useAuth();
   const mutation = useMutation({
-    mutationFn: api.createQuiz,
+    mutationFn: ({ name, access }: { name: string; access: QuizVisibility }) =>
+      api.createQuiz(name, access),
     onSuccess: async (value) => {
       await client.invalidateQueries({ queryKey: keys.quizzes(user!.id) });
       setTitle('');
+      setVisibility('private');
       onOpenChange(false);
       navigate(`/quizzes/${value.id}/edit`);
     },
   });
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (title.trim() && !mutation.isPending) mutation.mutate(title.trim());
+    if (title.trim() && !mutation.isPending)
+      mutation.mutate({ name: title.trim(), access: visibility });
   }
   return (
     <Modal
@@ -61,6 +66,18 @@ export function CreateQuizDialog({
         <div className="field-hint">
           Можно изменить в любое время<span>{title.length}/50</span>
         </div>
+        <label className="field-label" htmlFor="quiz-visibility">
+          Доступ
+        </label>
+        <select
+          id="quiz-visibility"
+          value={visibility}
+          onChange={(e) => setVisibility(e.target.value as QuizVisibility)}
+          disabled={mutation.isPending}
+        >
+          <option value="private">Приватный — доступен только вам</option>
+          <option value="public">Публичный — доступен по ссылке</option>
+        </select>
         {mutation.error && <ErrorBox message={errorMessage(mutation.error)} />}
         <div className="modal-actions">
           <Button

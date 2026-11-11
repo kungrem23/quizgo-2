@@ -3,10 +3,11 @@ package quizhandler
 import "github.com/kungrem23/quizgo/services/quiz/internal/domain"
 
 type QuizResponse struct {
-	ID        int                 `json:"id" example:"1"`
-	Title     string              `json:"title" example:"География"`
-	AuthorID  int                 `json:"author_id" example:"42"`
-	Questions []*QuestionResponse `json:"questions"`
+	ID         int                 `json:"id" example:"1"`
+	Title      string              `json:"title" example:"География"`
+	AuthorID   int                 `json:"author_id" example:"42"`
+	Visibility quiz.QuizVisibility `json:"visibility" enums:"private,public"`
+	Questions  []*QuestionResponse `json:"questions"`
 }
 
 type QuestionResponse struct {
@@ -38,7 +39,7 @@ type UserResponse struct {
 }
 
 func newQuizResponse(value quiz.Quiz) QuizResponse {
-	result := QuizResponse{ID: value.Id, Title: value.Title, AuthorID: value.AuthorId}
+	result := QuizResponse{ID: value.Id, Title: value.Title, AuthorID: value.AuthorId, Visibility: value.Visibility}
 	if value.Questions != nil {
 		result.Questions = make([]*QuestionResponse, len(value.Questions))
 		for i, question := range value.Questions {

@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,12 +17,13 @@ var ErrQuizNotPlayable = errors.New("quiz is not playable")
 var ErrNotQuizOwner = errors.New("quiz belongs to another user")
 
 type QuizSummary struct {
-	ID            int       `json:"id"`
-	Title         string    `json:"title"`
-	AuthorID      int       `json:"author_id"`
-	QuestionCount int       `json:"question_count"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	Revision      int64     `json:"revision"`
+	ID            int            `json:"id"`
+	Title         string         `json:"title"`
+	AuthorID      int            `json:"author_id"`
+	Visibility    QuizVisibility `json:"visibility"`
+	QuestionCount int            `json:"question_count"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	Revision      int64          `json:"revision"`
 }
 
 type QuizContent struct {
@@ -75,14 +77,15 @@ func (v QuizContent) ValidatePlayable() error {
 
 // Array order is the persisted order; zero IDs represent new items.
 type SaveQuizContent struct {
-	Title     string            `json:"title"`
-	Revision  int64             `json:"revision"`
-	Questions []ContentQuestion `json:"questions"`
+	Title      string            `json:"title"`
+	Visibility QuizVisibility    `json:"visibility,omitempty"`
+	Revision   int64             `json:"revision"`
+	Questions  []ContentQuestion `json:"questions"`
 }
 
 func (v *SaveQuizContent) Validate() error {
 	v.Title = strings.TrimSpace(v.Title)
-	if v.Title == "" || utf8.RuneCountInString(v.Title) > 50 || v.Revision < 1 || v.Questions == nil || len(v.Questions) > 100 {
+	if v.Title == "" || utf8.RuneCountInString(v.Title) > 50 || (v.Visibility != "" && !v.Visibility.Valid()) || v.Revision < 1 || v.Questions == nil || len(v.Questions) > 100 {
 		return fmt.Errorf("%w: title, revision or questions", ErrContentInvalid)
 	}
 	questions, answers := map[int]bool{}, map[int]bool{}
@@ -130,6 +133,9 @@ func (s *Service) GetQuizContent(ctx context.Context, id int) (QuizContent, erro
 	if err != nil {
 		return v, err
 	}
+	if !canViewQuiz(ctx, v.AuthorID, v.Visibility) {
+		return QuizContent{}, sql.ErrNoRows
+	}
 	return v, s.resolveImages(ctx, v.Questions)
 }
 
@@ -140,7 +146,7 @@ func (s *Service) GetPlayableQuiz(ctx context.Context, id, userID int) (QuizCont
 	if err != nil {
 		return v, err
 	}
-	if v.AuthorID != userID {
+	if v.AuthorID != userID && !v.Visibility.Public() {
 		return QuizContent{}, ErrNotQuizOwner
 	}
 	if err := v.ValidatePlayable(); err != nil {

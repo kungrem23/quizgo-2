@@ -16,7 +16,18 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Eye, GripVertical, List, Plus, Save, Sparkles, X } from 'lucide-react';
+import {
+  Check,
+  Eye,
+  GripVertical,
+  List,
+  Lock,
+  Globe2,
+  Plus,
+  Save,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { api, ApiError, errorMessage, keys } from '../../shared/api/client';
 import type { QuizContent } from '../../shared/api/types';
 import { Button, ErrorBox, Modal, useToast } from '../../shared/ui/ui';
@@ -89,7 +100,7 @@ export function EditorWorkspace({ content }: { content: QuizContent }) {
   const [state, dispatch] = useReducer(
     reducer,
     content,
-    (value) => readDraft(storageKey) || toDraft(value),
+    (value) => readDraft(storageKey, value.visibility) || toDraft(value),
   );
   const [baseline, setBaseline] = useState(() => fingerprint(toDraft(content)));
   const requested = params.get('question');
@@ -245,6 +256,23 @@ export function EditorWorkspace({ content }: { content: QuizContent }) {
             maxLength={50}
             disabled={busy}
           />
+          <label className="editor-visibility">
+            {state.visibility === 'public' ? <Globe2 size={14} /> : <Lock size={14} />}
+            <select
+              aria-label="Доступ к квизу"
+              value={state.visibility}
+              disabled={busy}
+              onChange={(e) =>
+                dispatch({
+                  type: 'visibility',
+                  value: e.target.value as 'private' | 'public',
+                })
+              }
+            >
+              <option value="private">Приватный</option>
+              <option value="public">Публичный</option>
+            </select>
+          </label>
         </div>
         <div className="editor-actions">
           <span className={`save-status ${dirty ? 'has-changes' : ''}`} role="status">

@@ -2,6 +2,7 @@ import type {
   CreatedGame,
   QuizContent,
   QuizSummary,
+  QuizVisibility,
   SaveContent,
   UploadedImage,
   User,
@@ -73,12 +74,7 @@ export async function request<T>(
 
 export function refreshAuthorization(): Promise<string> {
   if (!refreshInFlight) {
-    refreshInFlight = request<{ token: string }>(
-      '/auth/refresh',
-      { method: 'POST' },
-      false,
-      false,
-    )
+    refreshInFlight = request<{ token: string }>('/auth/refresh', { method: 'POST' }, false, false)
       .then(({ token }) => {
         setAuthorization(token);
         return token;
@@ -119,18 +115,21 @@ export const api = {
   me: () => request<User>('/api/me'),
   myQuizzes: (signal?: AbortSignal) =>
     request<QuizSummary[] | null>('/api/me/quizzes', { signal }).then((v) => v ?? []),
-  createQuiz: (title: string) =>
-    request<{ id: number }>('/api/quizzes', { method: 'POST', body: json({ title }) }),
+  createQuiz: (title: string, visibility: QuizVisibility = 'private') =>
+    request<{ id: number }>('/api/quizzes', {
+      method: 'POST',
+      body: json({ title, visibility }),
+    }),
   createGame: (quizId: number) =>
     request<CreatedGame>('/api/games', { method: 'POST', body: json({ quiz_id: quizId }) }),
   quiz: (id: number, author = false, signal?: AbortSignal) =>
-    request<QuizContent>(`/api/quizzes/${id}/${author ? 'author' : 'content'}`, { signal }, author),
+    request<QuizContent>(`/api/quizzes/${id}/${author ? 'author' : 'content'}`, { signal }),
   user: (id: number) => request<User>(`/api/users/${id}`, {}, false),
   saveQuiz: (id: number, content: SaveContent) =>
     request<QuizContent>(`/api/quizzes/${id}/content`, { method: 'PUT', body: json(content) }),
   deleteQuiz: (id: number) => request<void>(`/api/quizzes/${id}`, { method: 'DELETE' }),
   imageURL: (id: string, signal?: AbortSignal) =>
-    request<UploadedImage>(`/api/images/${encodeURIComponent(id)}/url`, { signal }, false),
+    request<UploadedImage>(`/api/images/${encodeURIComponent(id)}/url`, { signal }),
   uploadImage: (file: File) => {
     const body = new FormData();
     body.append('file', file);
